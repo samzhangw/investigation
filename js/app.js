@@ -7,7 +7,8 @@ const app = {
         surveys: [],
         selectedSurvey: null,
         currentView: 'home',
-        signaturePad: null
+        signaturePad: null,
+        newSurveyQuestions: [] // For Survey Builder
     },
 
     // Initialization
@@ -128,12 +129,128 @@ const app = {
         document.getElementById('form-survey-desc').innerText = survey.description;
         document.getElementById('form-survey-deadline').innerText = survey.deadline;
         
+        // Render Dynamic Questions
+        app.renderDynamicQuestions(survey.questions || []);
+
         // Reset Inputs
         document.getElementById('response-form').reset();
         app.clearSignature();
         document.getElementById('form-error-msg').classList.add('hidden');
         
         app.navigate('form');
+    },
+
+    renderDynamicQuestions: (questions) => {
+        const container = document.getElementById('dynamic-questions-container');
+        if (!questions || questions.length === 0) {
+            container.innerHTML = '';
+            container.classList.add('hidden');
+            return;
+        }
+        
+        container.classList.remove('hidden');
+        container.innerHTML = `
+            <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                    <svg class="h-5 w-5 mr-2 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                    調查內容
+                </h3>
+                <div class="space-y-6">
+                ${questions.map((q, idx) => {
+                    const requiredStar = q.required ? '<span class="text-red-500 ml-1">*</span>' : '';
+                    let inputHtml = '';
+                    
+                    if (q.type === 'text') {
+                        inputHtml = `<input name="q_${idx}" type="text" class="w-full px-4 py-2 rounded-xl border border-slate-300 focus:border-brand-500 outline-none" placeholder="請輸入回答" ${q.required ? 'required' : ''}>`;
+                    } else if (q.type === 'radio') {
+                        inputHtml = `<div class="space-y-2">
+                            ${q.options.map(opt => `
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <input type="radio" name="q_${idx}" value="${opt}" class="form-radio h-5 w-5 text-brand-600 focus:ring-brand-500 border-gray-300" ${q.required ? 'required' : ''}>
+                                    <span class="text-slate-700">${opt}</span>
+                                </label>
+                            `).join('')}
+                        </div>`;
+                    } else if (q.type === 'checkbox') {
+                         inputHtml = `<div class="space-y-2">
+                            ${q.options.map(opt => `
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <input type="checkbox" name="q_${idx}" value="${opt}" class="form-checkbox h-5 w-5 text-brand-600 focus:ring-brand-500 border-gray-300">
+                                    <span class="text-slate-700">${opt}</span>
+                                </label>
+                            `).join('')}
+                        </div>`;
+                    }
+
+                    return `
+                    <div>
+                        <label class="block text-sm font-bold text-slate-700 mb-2">${q.label} ${requiredStar}</label>
+                        ${inputHtml}
+                    </div>
+                    `;
+                }).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    // Form Builder Logic
+    addQuestion: (type) => {
+        app.state.newSurveyQuestions.push({
+            id: Date.now().toString(),
+            type,
+            label: '',
+            options: type === 'text' ? [] : ['選項1'],
+            required: true
+        });
+        app.renderQuestionBuilder();
+    },
+
+    removeQuestion: (idx) => {
+        app.state.newSurveyQuestions.splice(idx, 1);
+        app.renderQuestionBuilder();
+    },
+
+    updateQuestion: (idx, field, value) => {
+        app.state.newSurveyQuestions[idx][field] = value;
+        app.renderQuestionBuilder(); // Re-render needed if changing type? usually not for simple inputs
+    },
+
+    updateQuestionOptions: (idx, value) => {
+        // Options input is a comma separated string
+        app.state.newSurveyQuestions[idx].options = value.split(',').map(s => s.trim()).filter(s => s);
+    },
+
+    renderQuestionBuilder: () => {
+        const container = document.getElementById('question-builder-container');
+        if (app.state.newSurveyQuestions.length === 0) {
+             container.innerHTML = '<div class="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-sm">點擊上方按鈕新增題目</div>';
+             return;
+        }
+
+        container.innerHTML = app.state.newSurveyQuestions.map((q, idx) => {
+            const typeLabel = q.type === 'text' ? '簡答題' : q.type === 'radio' ? '單選題' : '多選題';
+            const optionsInput = q.type !== 'text' 
+                ? `<div class="mt-2">
+                     <label class="text-xs text-slate-500">選項 (請用逗號分隔)</label>
+                     <input type="text" value="${q.options.join(', ')}" onchange="app.updateQuestionOptions(${idx}, this.value)" class="w-full text-sm px-3 py-1.5 border border-slate-200 rounded-lg" placeholder="例如: 是, 否, 其他">
+                   </div>` 
+                : '';
+
+            return `
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 relative group">
+                <button type="button" onclick="app.removeQuestion(${idx})" class="absolute top-2 right-2 text-slate-400 hover:text-red-500 px-2">✕</button>
+                <div class="flex items-center mb-2">
+                    <span class="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-0.5 rounded mr-2">${typeLabel}</span>
+                    <label class="flex items-center text-xs text-slate-500 cursor-pointer">
+                        <input type="checkbox" onchange="app.updateQuestion(${idx}, 'required', this.checked)" ${q.required ? 'checked' : ''} class="mr-1"> 必填
+                    </label>
+                </div>
+                <input type="text" value="${q.label}" onchange="app.updateQuestion(${idx}, 'label', this.value)" class="w-full font-bold bg-transparent border-b border-dashed border-slate-300 focus:border-brand-500 outline-none placeholder-slate-400" placeholder="請輸入題目內容...">
+                ${optionsInput}
+            </div>
+            `;
+        }).join('');
     },
 
     // Form & Signature
@@ -232,6 +349,29 @@ const app = {
             errorEl.classList.remove('hidden');
             return;
         }
+        
+        // Collect Dynamic Answers
+        const answers = {};
+        const questions = app.state.selectedSurvey.questions || [];
+        const form = document.getElementById('response-form');
+        const formData = new FormData(form);
+
+        for (let i = 0; i < questions.length; i++) {
+            const q = questions[i];
+            const name = `q_${i}`;
+            const val = formData.getAll(name); // returns array
+
+            if (q.required && (val.length === 0 || (val.length === 1 && val[0] === ''))) {
+                 errorEl.innerText = `請回答問題：「${q.label}」`;
+                 errorEl.classList.remove('hidden');
+                 return;
+            }
+            
+            // Store simple string for single val, array for checkboxes
+            answers[q.label] = val.length > 1 ? val : (val[0] || "");
+        }
+        
+        app.state.tempAnswers = answers;
 
         // Check Duplicate
         app.setLoading(true);
@@ -292,6 +432,7 @@ const app = {
             parentName: document.getElementById('input-parent-name').value,
             comments: document.getElementById('input-comments').value,
             signatureDataUrl: app.state.signaturePad.canvas.toDataURL(),
+            answers: app.state.tempAnswers || {}, // Attach dynamic answers
             securityMetadata: {
                 userAgent: navigator.userAgent,
                 deviceType: /Mobi|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
@@ -400,7 +541,7 @@ const app = {
                     <td class="px-6 py-4 text-xs text-slate-500">${new Date(r.submittedAt).toLocaleString()}</td>
                     <td class="px-6 py-4 text-sm truncate max-w-xs">${r.comments || ''}</td>
                     <td class="px-6 py-4">
-                        <button onclick='app.showCertificate(${JSON.stringify(r).replace(/'/g, "&#39;")})' class="text-xs bg-brand-50 text-brand-700 px-3 py-1 rounded-full border border-brand-200">檢視</button>
+                        <button onclick='app.showCertificate(${JSON.stringify(r).replace(/'/g, "&#39;")})' class="text-xs bg-brand-50 text-brand-700 px-3 py-1 rounded-full border border-brand-200">詳情</button>
                     </td>
                 </tr>
             `).join('');
@@ -413,17 +554,26 @@ const app = {
         const responses = app.state.currentAdminResponses || [];
         if(!responses.length) return alert("無資料可匯出");
 
-        const headers = ["學生姓名", "學號", "家長姓名", "提交時間", "備註", "驗證狀態", "IP", "流水號"];
-        const rows = responses.map(r => [
-            r.studentName,
-            r.studentId,
-            r.parentName,
-            new Date(r.submittedAt).toLocaleString(),
-            String(r.comments || "").replace(/(\r\n|\n|\r)/gm, " "),
-            r.securityMetadata?.verifiedByPin ? "已驗證" : "未驗證",
-            r.securityMetadata?.ipAddress || "",
-            r.id
-        ].map(f => `"${String(f).replace(/"/g, '""')}"`).join(","));
+        const headers = ["學生姓名", "學號", "家長姓名", "提交時間", "備註", "回答內容", "驗證狀態", "IP", "流水號"];
+        const rows = responses.map(r => {
+            // Flatten answers to string
+            let answersStr = "";
+            if (r.answers) {
+                answersStr = Object.entries(r.answers).map(([k, v]) => `${k}: ${Array.isArray(v)?v.join(','):v}`).join(" | ");
+            }
+
+            return [
+                r.studentName,
+                r.studentId,
+                r.parentName,
+                new Date(r.submittedAt).toLocaleString(),
+                String(r.comments || "").replace(/(\r\n|\n|\r)/gm, " "),
+                answersStr,
+                r.securityMetadata?.verifiedByPin ? "已驗證" : "未驗證",
+                r.securityMetadata?.ipAddress || "",
+                r.id
+            ].map(f => `"${String(f).replace(/"/g, '""')}"`).join(",");
+        });
 
         const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -434,6 +584,9 @@ const app = {
     },
 
     openCreateSurveyModal: () => {
+        app.state.newSurveyQuestions = [];
+        document.getElementById('create-survey-form').reset();
+        app.renderQuestionBuilder();
         document.getElementById('modal-create').classList.remove('hidden');
     },
 
@@ -442,7 +595,8 @@ const app = {
         const data = {
             title: document.getElementById('new-survey-title').value,
             description: document.getElementById('new-survey-desc').value,
-            deadline: document.getElementById('new-survey-deadline').value
+            deadline: document.getElementById('new-survey-deadline').value,
+            questions: app.state.newSurveyQuestions // Attach questions
         };
         
         // Date check
@@ -467,12 +621,39 @@ const app = {
     showCertificate: (r) => {
         const modal = document.getElementById('modal-certificate');
         const content = document.getElementById('certificate-content');
+        
+        let answersHtml = '<div class="text-center text-slate-400 text-sm py-4">無回答內容</div>';
+        if (r.answers && Object.keys(r.answers).length > 0) {
+            answersHtml = Object.entries(r.answers).map(([label, val]) => `
+                <div class="mb-3 border-b border-slate-100 pb-2 last:border-0">
+                    <div class="text-xs text-slate-500 font-bold mb-1">${label}</div>
+                    <div class="text-sm text-slate-800">${Array.isArray(val) ? val.join(', ') : val}</div>
+                </div>
+            `).join('');
+        }
+
         content.innerHTML = `
-            <div class="border-2 border-slate-200 rounded-xl bg-slate-50 h-40 flex items-center justify-center overflow-hidden mb-4 relative">
-                <div class="absolute inset-0 opacity-[0.05]" style="background-image: radial-gradient(#000 1px, transparent 1px); background-size: 10px 10px;"></div>
-                <img src="${r.signatureDataUrl}" class="max-h-32 relative z-10" />
-            </div>
-            <div class="grid grid-cols-2 gap-4 text-sm">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <!-- 簽名區塊 -->
+                <div class="col-span-1 md:col-span-2">
+                    <div class="border-2 border-slate-200 rounded-xl bg-slate-50 h-32 flex items-center justify-center overflow-hidden mb-2 relative">
+                        <div class="absolute inset-0 opacity-[0.05]" style="background-image: radial-gradient(#000 1px, transparent 1px); background-size: 10px 10px;"></div>
+                        <img src="${r.signatureDataUrl}" class="max-h-24 relative z-10" />
+                    </div>
+                </div>
+
+                <!-- 詳細回答區塊 -->
+                <div class="col-span-1 md:col-span-2">
+                    <h4 class="font-bold text-slate-800 mb-2 flex items-center">
+                        <svg class="w-4 h-4 mr-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                        填寫內容詳細
+                    </h4>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm max-h-60 overflow-y-auto">
+                        ${answersHtml}
+                    </div>
+                </div>
+
+                <!-- Metadata -->
                 <div class="bg-slate-50 p-3 rounded-lg border">
                     <span class="text-xs text-slate-400 font-bold block">PIN 驗證</span>
                     <span class="font-mono font-bold text-slate-800">${r.securityMetadata?.verifiedByPin ? 'PASS' : 'FAIL'}</span>
@@ -480,10 +661,6 @@ const app = {
                 <div class="bg-slate-50 p-3 rounded-lg border">
                     <span class="text-xs text-slate-400 font-bold block">IP 位址</span>
                     <span class="font-mono text-slate-800">${r.securityMetadata?.ipAddress || 'Unknown'}</span>
-                </div>
-                <div class="bg-slate-50 p-3 rounded-lg border col-span-2">
-                    <span class="text-xs text-slate-400 font-bold block">User Agent</span>
-                    <span class="font-mono text-xs text-slate-500 break-all">${r.securityMetadata?.userAgent || 'Unknown'}</span>
                 </div>
             </div>
         `;
