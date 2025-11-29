@@ -1,3 +1,4 @@
+
 /**
  * Main Application Logic
  */
@@ -8,7 +9,8 @@ const app = {
         selectedSurvey: null,
         currentView: 'home',
         signaturePad: null,
-        newSurveyQuestions: [] // For Survey Builder
+        newSurveyQuestions: [], // For Survey Builder
+        charts: [] // Store chart instances to destroy them later
     },
 
     // Initialization
@@ -20,6 +22,9 @@ const app = {
         
         // Initial route
         app.navigate('home');
+        
+        // Check for announcements
+        app.checkAnnouncement();
     },
 
     // UI & Navigation
@@ -54,12 +59,20 @@ const app = {
             document.getElementById('nav-student').classList.remove('hidden');
             document.getElementById('nav-admin').classList.add('hidden');
             app.navigate('home');
+            app.checkAnnouncement(); // Re-check as student
         }
     },
 
-    setLoading: (isLoading) => {
+    setLoading: (isLoading, message = "資料讀取中...") => {
         const overlay = document.getElementById('loading-overlay');
-        isLoading ? overlay.classList.remove('hidden') : overlay.classList.add('hidden');
+        const textEl = document.getElementById('loading-text');
+        
+        if (isLoading) {
+            if(textEl) textEl.innerText = message;
+            overlay.classList.remove('hidden');
+        } else {
+            overlay.classList.add('hidden');
+        }
     },
 
     setupClock: () => {
@@ -77,9 +90,66 @@ const app = {
         update();
     },
 
+    // --- Announcement Logic ---
+    checkAnnouncement: async () => {
+        if (app.state.role === 'admin') return; // Admins don't need the popup
+        
+        try {
+            const ann = await API.getAnnouncement();
+            if (ann.isActive && ann.title) {
+                // Check if user has already seen this version of announcement (using timestamp)
+                const seenKey = 'ann_seen_' + ann.updatedAt;
+                if (!sessionStorage.getItem(seenKey)) {
+                    document.getElementById('view-ann-title').innerText = ann.title;
+                    document.getElementById('view-ann-content').innerText = ann.content;
+                    document.getElementById('modal-announcement-view').classList.remove('hidden');
+                    
+                    // Mark as seen for this session
+                    sessionStorage.setItem(seenKey, 'true');
+                }
+            }
+        } catch (e) {
+            console.error("Failed to check announcement", e);
+        }
+    },
+
+    openAnnouncementEditor: async () => {
+        app.setLoading(true, "載入公告設定...");
+        try {
+            const ann = await API.getAnnouncement();
+            document.getElementById('ann-title').value = ann.title || '';
+            document.getElementById('ann-content').value = ann.content || '';
+            document.getElementById('ann-active').checked = ann.isActive;
+            
+            document.getElementById('modal-announcement-editor').classList.remove('hidden');
+        } catch(e) {
+            alert("無法載入公告設定");
+        } finally {
+            app.setLoading(false);
+        }
+    },
+
+    saveAnnouncement: async () => {
+        const title = document.getElementById('ann-title').value;
+        const content = document.getElementById('ann-content').value;
+        const isActive = document.getElementById('ann-active').checked;
+        
+        document.getElementById('modal-announcement-editor').classList.add('hidden');
+        app.setLoading(true, "儲存公告中...");
+        
+        try {
+            await API.saveAnnouncement({ title, content, isActive });
+            alert("公告設定已更新！");
+        } catch(e) {
+            alert("儲存失敗");
+        } finally {
+            app.setLoading(false);
+        }
+    },
+
     // Survey Logic
     loadSurveys: async () => {
-        app.setLoading(true);
+        app.setLoading(true, "正在載入調查資料...");
         try {
             const data = await API.getSurveys();
             app.state.surveys = data;
@@ -137,7 +207,30 @@ const app = {
         app.clearSignature();
         document.getElementById('form-error-msg').classList.add('hidden');
         
+        // Preview Mode Handling
+        const banner = document.getElementById('preview-mode-banner');
+        if (app.state.role === 'admin') {
+            banner.classList.remove('hidden');
+        } else {
+            banner.classList.add('hidden');
+        }
+        
         app.navigate('form');
+    },
+    
+    // New function to handle exiting the form
+    exitForm: () => {
+        if (app.state.role === 'admin') {
+            app.navigate('admin');
+        } else {
+            app.navigate('home');
+        }
+    },
+    
+    handleAdminPreview: () => {
+        const id = document.getElementById('admin-survey-select').value;
+        if(!id) return alert("請先選擇一個調查");
+        app.openSurveyForm(id);
     },
 
     renderDynamicQuestions: (questions) => {
@@ -374,7 +467,7 @@ const app = {
         app.state.tempAnswers = answers;
 
         // Check Duplicate
-        app.setLoading(true);
+        app.setLoading(true, "檢查提交狀態...");
         try {
             const isDup = await API.hasStudentSubmitted(app.state.selectedSurvey.id, studentId);
             if (isDup) {
@@ -423,7 +516,7 @@ const app = {
 
         // Proceed to Submit
         document.getElementById('modal-pin').classList.add('hidden');
-        app.setLoading(true);
+        app.setLoading(true, "正在提交回條...");
         
         const data = {
             surveyId: app.state.selectedSurvey.id,
@@ -476,7 +569,7 @@ const app = {
         const id = document.getElementById('inquiry-student-id').value.trim();
         if(!id) return;
         
-        app.setLoading(true);
+        app.setLoading(true, "查詢紀錄中...");
         try {
             const results = await API.checkStudentStatus(id);
             const container = document.getElementById('inquiry-results');
@@ -526,6 +619,9 @@ const app = {
             app.state.currentAdminResponses = responses; // Save for CSV
             document.getElementById('admin-total-responses').innerText = responses.length;
 
+            // Render Charts
+            app.renderAnalytics(responses, survey);
+
             if(responses.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">尚無回覆</td></tr>';
                 return;
@@ -548,6 +644,82 @@ const app = {
         } catch(e) {
             console.error(e);
         }
+    },
+
+    renderAnalytics: (responses, survey) => {
+        const container = document.getElementById('admin-analytics-container');
+        container.innerHTML = '';
+        
+        // Destroy old charts to prevent memory leaks
+        if (app.state.charts) {
+            app.state.charts.forEach(c => c.destroy());
+        }
+        app.state.charts = [];
+
+        if (!survey.questions || survey.questions.length === 0) return;
+
+        const colors = [
+            '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', 
+            '#6366f1', '#14b8a6', '#f97316', '#ec4899', '#64748b'
+        ];
+
+        survey.questions.forEach((q, idx) => {
+            if (q.type === 'text') return; // Skip text questions for charts
+
+            // Create Canvas Container
+            const wrapper = document.createElement('div');
+            wrapper.className = "bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col";
+            wrapper.innerHTML = `
+                <h4 class="text-sm font-bold text-slate-800 mb-4 border-l-4 border-brand-500 pl-2">${q.label}</h4>
+                <div class="flex-grow flex items-center justify-center relative h-64">
+                    <canvas id="chart-${idx}"></canvas>
+                </div>
+            `;
+            container.appendChild(wrapper);
+
+            // Aggregate Data
+            const counts = {};
+            q.options.forEach(opt => counts[opt] = 0); // Init with 0
+
+            responses.forEach(r => {
+                if (!r.answers) return;
+                const ans = r.answers[q.label];
+                
+                if (Array.isArray(ans)) {
+                    // Checkbox
+                    ans.forEach(val => {
+                        if (counts[val] !== undefined) counts[val]++;
+                    });
+                } else {
+                    // Radio
+                    if (counts[ans] !== undefined) counts[ans]++;
+                }
+            });
+
+            const ctx = document.getElementById(`chart-${idx}`).getContext('2d');
+            const config = {
+                type: q.type === 'checkbox' ? 'bar' : 'pie', // Bar for multi, Pie for single
+                data: {
+                    labels: Object.keys(counts),
+                    datasets: [{
+                        label: '人數',
+                        data: Object.values(counts),
+                        backgroundColor: q.type === 'checkbox' ? '#0ea5e9' : colors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            };
+            
+            const chart = new Chart(ctx, config);
+            app.state.charts.push(chart);
+        });
     },
 
     exportCSV: () => {
@@ -605,7 +777,7 @@ const app = {
         }
 
         document.getElementById('modal-create').classList.add('hidden');
-        app.setLoading(true);
+        app.setLoading(true, "建立調查中...");
 
         try {
             const newS = await API.createSurvey(data);

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -46,6 +47,9 @@
       }
     </script>
     <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -112,9 +116,34 @@
     <!-- Main Content Area -->
     <main class="min-h-screen pb-20 pt-8 px-4">
         
-        <!-- Loading Spinner -->
-        <div id="loading-overlay" class="hidden fixed inset-0 bg-slate-50/80 backdrop-blur-sm z-[100] flex items-center justify-center">
-            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-500"></div>
+        <!-- Premium Loading Overlay -->
+        <div id="loading-overlay" class="hidden fixed inset-0 bg-slate-50/95 backdrop-blur-md z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
+            <div class="relative flex items-center justify-center w-32 h-32">
+                <!-- Outer Pulse Ring -->
+                <div class="absolute inset-0 border-4 border-brand-100 rounded-full animate-pulse-ring"></div>
+                <!-- Middle Static Ring -->
+                <div class="absolute inset-2 border-4 border-slate-100 rounded-full"></div>
+                <!-- Spinning Gradient Ring -->
+                <div class="absolute inset-2 border-4 border-brand-500 rounded-full border-t-transparent border-l-transparent animate-spin"></div>
+                <!-- Inner Floating Icon -->
+                <div class="absolute inset-0 flex items-center justify-center animate-loader-float">
+                    <div class="bg-white p-3 rounded-full shadow-lg border border-slate-100">
+                         <svg class="h-8 w-8 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-8 text-center space-y-2 z-10">
+                <h3 id="loading-text" class="text-xl font-bold text-slate-800 tracking-wide animate-pulse">資料讀取中...</h3>
+                <p class="text-xs text-brand-500 font-semibold uppercase tracking-widest">SchoolConnect System</p>
+            </div>
+            <!-- Decorative Background Elements -->
+            <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
+                <div class="absolute -top-20 -left-20 w-96 h-96 bg-brand-300 rounded-full blur-3xl mix-blend-multiply filter"></div>
+                <div class="absolute top-1/2 -right-20 w-72 h-72 bg-purple-300 rounded-full blur-3xl mix-blend-multiply filter"></div>
+                <div class="absolute -bottom-32 left-1/3 w-80 h-80 bg-emerald-300 rounded-full blur-3xl mix-blend-multiply filter"></div>
+            </div>
         </div>
 
         <!-- VIEW: Home (Survey List) -->
@@ -141,9 +170,21 @@
 
         <!-- VIEW: Form -->
         <section id="view-form" class="max-w-3xl mx-auto animate-slide-up hidden">
-            <button onclick="app.navigate('home')" class="mb-6 flex items-center text-sm font-medium text-slate-500 hover:text-brand-600 transition-colors">
+            <!-- Preview Banner -->
+            <div id="preview-mode-banner" class="hidden mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center text-yellow-800">
+                <svg class="h-6 w-6 mr-3 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                <div>
+                    <h3 class="font-bold">預覽模式</h3>
+                    <p class="text-sm">您目前正在以管理者身分預覽此問卷。</p>
+                </div>
+            </div>
+
+            <button onclick="app.exitForm()" class="mb-6 flex items-center text-sm font-medium text-slate-500 hover:text-brand-600 transition-colors">
                 <svg class="h-4 w-4 rotate-180 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                返回列表
+                返回
             </button>
 
             <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
@@ -258,6 +299,19 @@
                   <p class="text-slate-500 text-sm mt-1">檢視回覆狀況與發布新調查</p>
                 </div>
                 <div class="flex flex-col sm:flex-row gap-3">
+                  <button onclick="app.openAnnouncementEditor()" class="flex items-center justify-center px-4 py-2.5 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-orange-700 transition-colors shadow-sm" title="發布全校公告">
+                    <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                    </svg>
+                    發布公告
+                  </button>
+                  <button onclick="app.handleAdminPreview()" class="flex items-center justify-center px-4 py-2.5 bg-yellow-600 text-white text-sm font-bold rounded-xl hover:bg-yellow-700 transition-colors shadow-sm" title="以家長視角預覽調查">
+                    <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    預覽調查
+                  </button>
                   <button onclick="app.exportCSV()" class="flex items-center justify-center px-4 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
                     匯出 Excel
                   </button>
@@ -288,6 +342,11 @@
                         <span id="admin-current-pin" class="font-bold">PIN: ----</span>
                      </div>
                  </div>
+             </div>
+
+             <!-- Charts Container -->
+             <div id="admin-analytics-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <!-- Charts will be injected here -->
              </div>
 
              <!-- Table -->
@@ -399,6 +458,59 @@
             <div class="px-8 py-4 bg-slate-50 border-t border-slate-200 flex space-x-3">
                  <button type="button" onclick="document.getElementById('modal-create').classList.add('hidden')" class="flex-1 py-3 border rounded-xl text-slate-600 bg-white">取消</button>
                  <button onclick="document.getElementById('create-survey-form').requestSubmit()" class="flex-1 py-3 bg-brand-600 text-white rounded-xl font-bold shadow-md">建立調查</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Announcement Editor (Admin) -->
+    <div id="modal-announcement-editor" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
+        <div class="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col">
+            <div class="px-8 py-6 bg-orange-50 border-b border-orange-100 flex justify-between items-center">
+                <div class="flex items-center text-orange-700">
+                    <svg class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg>
+                    <h3 class="text-xl font-bold">編輯全校公告</h3>
+                </div>
+                <button onclick="document.getElementById('modal-announcement-editor').classList.add('hidden')" class="text-orange-400 hover:text-orange-600">✕</button>
+            </div>
+            
+            <div class="p-8 space-y-6">
+                <div class="space-y-2">
+                    <label class="block text-sm font-semibold text-slate-700">公告標題</label>
+                    <input id="ann-title" type="text" class="w-full px-4 py-2 border rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none">
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-semibold text-slate-700">公告內容</label>
+                    <textarea id="ann-content" rows="4" class="w-full px-4 py-2 border rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none resize-none"></textarea>
+                </div>
+                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <span class="text-sm font-bold text-slate-700">啟用狀態</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input id="ann-active" type="checkbox" class="sr-only peer">
+                      <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                      <span class="ml-3 text-xs font-medium text-slate-500 peer-checked:text-orange-600">已開啟</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="px-8 py-4 bg-slate-50 border-t border-slate-200 flex space-x-3">
+                 <button onclick="document.getElementById('modal-announcement-editor').classList.add('hidden')" class="flex-1 py-3 border rounded-xl text-slate-600 bg-white hover:bg-slate-50">取消</button>
+                 <button onclick="app.saveAnnouncement()" class="flex-1 py-3 bg-orange-600 text-white rounded-xl font-bold shadow-md hover:bg-orange-700">儲存並發布</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Announcement View (Student/Parent) -->
+    <div id="modal-announcement-view" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[70] p-4 animate-fade-in">
+        <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden relative">
+            <div class="bg-gradient-to-r from-orange-400 to-red-500 p-6 text-white text-center">
+                <div class="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                    <svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                </div>
+                <h3 id="view-ann-title" class="text-2xl font-bold tracking-tight">重要公告</h3>
+            </div>
+            <div class="p-8">
+                <p id="view-ann-content" class="text-slate-600 leading-relaxed text-lg whitespace-pre-wrap text-center mb-8"></p>
+                <button onclick="document.getElementById('modal-announcement-view').classList.add('hidden')" class="w-full py-3 bg-slate-900 text-white rounded-xl font-bold shadow-lg hover:bg-slate-800 transition-colors">我知道了</button>
             </div>
         </div>
     </div>

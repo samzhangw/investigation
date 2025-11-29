@@ -130,6 +130,29 @@ function handleRequest(e) {
       result = { status: "success" };
     }
 
+    // --- Announcement Actions ---
+    else if (action === "getAnnouncement") {
+        const props = PropertiesService.getScriptProperties();
+        result = {
+            title: props.getProperty("ANN_TITLE") || "",
+            content: props.getProperty("ANN_CONTENT") || "",
+            isActive: props.getProperty("ANN_ACTIVE") === "true",
+            updatedAt: props.getProperty("ANN_DATE") || ""
+        };
+    }
+    
+    else if (action === "saveAnnouncement") {
+        const props = PropertiesService.getScriptProperties();
+        const data = postData;
+        
+        props.setProperty("ANN_TITLE", data.title);
+        props.setProperty("ANN_CONTENT", data.content);
+        props.setProperty("ANN_ACTIVE", String(data.isActive));
+        props.setProperty("ANN_DATE", String(Date.now()));
+        
+        result = { status: "success" };
+    }
+
     return ContentService
       .createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);

@@ -22,3 +22,31 @@
 .touch-none {
     touch-action: none;
 }
+
+/* Loading Animations */
+@keyframes loader-float {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-3px) scale(1.05); }
+}
+
+@keyframes loader-ring-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes loader-pulse-ring {
+    0% { transform: scale(0.8); opacity: 0.5; }
+    100% { transform: scale(1.5); opacity: 0; }
+}
+
+.animate-loader-float {
+    animation: loader-float 2s ease-in-out infinite;
+}
+
+.animate-loader-spin-slow {
+    animation: loader-ring-spin 3s linear infinite;
+}
+
+.animate-pulse-ring {
+    animation: loader-pulse-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}

@@ -1,3 +1,4 @@
+
 // Configuration
 const API_URL = 'https://script.google.com/macros/s/AKfycbwOE9wsOY4ZHYtYDnRxpvmMu3fQr_8VlhuefU-NNs7TSmFGUysqVxNq-w_Z4wmECcHB/exec';
 
@@ -80,5 +81,14 @@ const API = {
         };
         await API.fetch('saveResponse', 'POST', newResponse);
         return newResponse;
+    },
+
+    // --- Announcement ---
+    getAnnouncement: async () => {
+        return await API.fetch('getAnnouncement');
+    },
+
+    saveAnnouncement: async (data) => {
+        return await API.fetch('saveAnnouncement', 'POST', data);
     }
 };
