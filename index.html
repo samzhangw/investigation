@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SchoolConnect - 家校通</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Noto Sans TC"', 'sans-serif'],
+            },
+            colors: {
+              brand: {
+                50: '#f0f9ff', 100: '#e0f2fe', 200: '#bae6fd', 300: '#7dd3fc',
+                400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1',
+                800: '#075985', 900: '#0c4a6e',
+              },
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out',
+              'slide-up': 'slideUp 0.5s ease-out',
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "@heroicons/react/": "https://aistudiocdn.com/@heroicons/react@^2.2.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-brand-100 selection:text-brand-900">
+
+    <!-- Navigation -->
+    <nav class="glass-panel sticky top-0 z-50 border-b border-slate-200/60 shadow-sm backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-18 py-3">
+                <div class="flex items-center cursor-pointer group" onclick="app.navigate('home')">
+                    <div class="bg-gradient-to-tr from-brand-600 to-brand-400 p-2 rounded-lg text-white shadow-lg shadow-brand-200 group-hover:scale-105 transition-transform">
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                    </div>
+                    <div class="ml-3 flex flex-col">
+                        <span class="text-lg font-bold text-slate-800 tracking-tight">SchoolConnect</span>
+                        <span class="text-[10px] text-slate-500 font-medium tracking-wide uppercase">家校通智慧系統</span>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-2 sm:space-x-4">
+                    <!-- Clock -->
+                    <div class="hidden md:flex items-center space-x-1.5 text-xs font-mono text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm mr-2">
+                        <svg class="h-3.5 w-3.5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span id="clock-display">--/--/-- --:--:--</span>
+                    </div>
+
+                    <!-- Role Based Nav -->
+                    <div id="nav-student" class="flex bg-slate-100/80 p-1 rounded-xl">
+                        <button onclick="app.navigate('home')" id="btn-nav-home" class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700">待辦事項</button>
+                        <button onclick="app.navigate('inquiry')" id="btn-nav-inquiry" class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700">查詢紀錄</button>
+                    </div>
+                    
+                    <div id="nav-admin" class="hidden">
+                         <span class="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-full uppercase tracking-wider">Admin Console</span>
+                    </div>
+
+                    <div class="h-6 w-px bg-slate-200 mx-2"></div>
+
+                    <div class="relative">
+                        <select id="role-select" onchange="app.switchRole(this.value)" class="appearance-none bg-transparent pl-3 pr-8 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 focus:outline-none cursor-pointer">
+                            <option value="student">家長/學生</option>
+                            <option value="admin">管理員</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="min-h-screen pb-20 pt-8 px-4">
+        
+        <!-- Loading Spinner -->
+        <div id="loading-overlay" class="hidden fixed inset-0 bg-slate-50/80 backdrop-blur-sm z-[100] flex items-center justify-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-500"></div>
+        </div>
+
+        <!-- VIEW: Home (Survey List) -->
+        <section id="view-home" class="max-w-5xl mx-auto animate-slide-up">
+            <div class="mb-10 text-center sm:text-left bg-gradient-to-r from-brand-600 to-brand-800 rounded-3xl p-8 sm:p-12 text-white shadow-xl shadow-brand-200 relative overflow-hidden">
+                <div class="absolute top-0 right-0 -mt-10 -mr-10 bg-white/10 w-64 h-64 rounded-full blur-3xl"></div>
+                <div class="relative z-10">
+                    <h1 class="text-3xl sm:text-4xl font-extrabold mb-4 tracking-tight">歡迎使用 SchoolConnect</h1>
+                    <p class="text-brand-100 text-lg max-w-2xl">這是您的家校互動中心。請查看下方的待辦回條，或切換至查詢頁面追蹤歷史紀錄。</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between mb-6 px-2">
+                <h2 class="text-xl font-bold text-slate-800 flex items-center">
+                    <svg class="h-6 w-6 text-brand-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M12 14l9-5-9-5-9 5 9 5z"/><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"/></svg>
+                    最新調查事項
+                </h2>
+            </div>
+            
+            <div id="survey-list-container" class="grid gap-6 md:grid-cols-2">
+                <!-- Survey cards will be injected here -->
+            </div>
+        </section>
+
+        <!-- VIEW: Form -->
+        <section id="view-form" class="max-w-3xl mx-auto animate-slide-up hidden">
+            <button onclick="app.navigate('home')" class="mb-6 flex items-center text-sm font-medium text-slate-500 hover:text-brand-600 transition-colors">
+                <svg class="h-4 w-4 rotate-180 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                返回列表
+            </button>
+
+            <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
+                <div class="bg-gradient-to-r from-brand-50 to-white px-8 py-10 border-b border-brand-100">
+                    <h2 id="form-survey-title" class="text-3xl font-bold text-slate-900 mb-4"></h2>
+                    <div class="flex items-center text-sm text-brand-700 bg-brand-50 inline-flex px-3 py-1 rounded-full mb-6">
+                        <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        截止日期：<span id="form-survey-deadline"></span>
+                    </div>
+                    <div id="form-survey-desc" class="text-slate-600 leading-relaxed bg-white/60 p-4 rounded-xl backdrop-blur-sm border border-brand-50/50"></div>
+                </div>
+
+                <form id="response-form" onsubmit="app.handleFormSubmit(event)" class="px-8 py-8 space-y-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold text-slate-700 ml-1">學生姓名</label>
+                            <input id="input-student-name" required type="text" placeholder="例如：王小明" class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold text-slate-700 ml-1">學號</label>
+                            <input id="input-student-id" required type="text" placeholder="例如：110001" class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all outline-none uppercase">
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-semibold text-slate-700 ml-1">家長姓名</label>
+                        <input id="input-parent-name" required type="text" placeholder="請輸入家長全名" class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all outline-none">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-semibold text-slate-700 ml-1">意見或備註 (選填)</label>
+                        <textarea id="input-comments" rows="3" placeholder="如有疑問或特殊需求請在此填寫..." class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all outline-none resize-none"></textarea>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-100">
+                        <label class="block text-sm font-semibold text-slate-700 mb-4 ml-1 flex items-center">
+                            家長數位簽名 <span class="ml-2 text-xs font-normal text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">必填</span>
+                        </label>
+                        <!-- Signature Pad Container -->
+                        <div class="flex flex-col gap-3">
+                            <div id="signature-pad-container" class="relative h-64 border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50 hover:bg-white hover:border-brand-400 transition-all overflow-hidden touch-none">
+                                <div id="signature-placeholder" class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-slate-300">
+                                    <span class="text-xl font-serif italic opacity-50">Please Sign Here</span>
+                                    <span class="text-sm opacity-60">請在此區域內簽名</span>
+                                </div>
+                                <canvas id="signature-canvas" class="w-full h-full cursor-crosshair"></canvas>
+                                <div id="signature-success-badge" class="hidden absolute bottom-3 right-3 pointer-events-none animate-fade-in">
+                                     <div class="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full flex items-center shadow-sm border border-green-200">
+                                       <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                       已簽署
+                                     </div>
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center text-sm px-1">
+                                <span class="text-slate-500 text-xs">建議使用手機或平板觸控簽名</span>
+                                <button type="button" onclick="app.clearSignature()" class="flex items-center px-4 py-2 text-rose-600 bg-white border border-rose-100 hover:bg-rose-50 rounded-lg text-xs font-bold shadow-sm">
+                                    清除重簽
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-start">
+                        <input id="input-declaration" type="checkbox" required class="mt-1 h-5 w-5 text-brand-600 border-slate-300 rounded focus:ring-brand-500 cursor-pointer">
+                        <div class="ml-3 text-sm">
+                            <label for="input-declaration" class="font-bold text-slate-700 cursor-pointer">本人聲明上述簽名為本人親簽，並具法律效力。</label>
+                            <p class="text-slate-500 mt-1 text-xs">系統將記錄您的裝置資訊以作為數位存證。</p>
+                        </div>
+                    </div>
+
+                    <div id="form-error-msg" class="hidden bg-red-50 text-red-600 p-4 rounded-xl text-sm font-bold border border-red-100"></div>
+
+                    <button type="submit" class="w-full flex items-center justify-center py-4 px-6 rounded-2xl shadow-lg shadow-brand-500/30 text-base font-bold text-white bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 transition-all hover:scale-[1.01]">
+                        驗證並提交
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- VIEW: Inquiry -->
+        <section id="view-inquiry" class="max-w-3xl mx-auto mt-12 px-4 animate-slide-up hidden">
+            <div class="text-center mb-10">
+                <h2 class="text-3xl font-bold text-slate-900">查詢簽署紀錄</h2>
+                <p class="mt-2 text-slate-500">輸入學號以確認回條是否已成功提交</p>
+            </div>
+            <div class="bg-white shadow-xl shadow-slate-200/40 rounded-3xl p-8 border border-slate-100">
+                <form onsubmit="app.handleInquiry(event)" class="relative max-w-lg mx-auto mb-10">
+                    <input id="inquiry-student-id" type="text" placeholder="請輸入學號 (例如: 110001)" class="w-full pl-6 pr-32 py-4 rounded-full border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all outline-none text-lg">
+                    <button type="submit" class="absolute right-2 top-2 bottom-2 bg-brand-600 text-white px-6 rounded-full font-medium hover:bg-brand-700 transition-colors shadow-md">查詢</button>
+                </form>
+                <div id="inquiry-results" class="space-y-4 animate-fade-in"></div>
+            </div>
+        </section>
+
+        <!-- VIEW: Admin -->
+        <section id="view-admin" class="max-w-7xl mx-auto px-4 py-8 animate-fade-in hidden">
+             <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                <div>
+                  <h2 class="text-2xl font-bold text-slate-900">管理儀表板</h2>
+                  <p class="text-slate-500 text-sm mt-1">檢視回覆狀況與發布新調查</p>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-3">
+                  <button onclick="app.exportCSV()" class="flex items-center justify-center px-4 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
+                    匯出 Excel
+                  </button>
+                  <button onclick="app.openCreateSurveyModal()" class="flex items-center justify-center px-4 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-sm">
+                    + 新增調查
+                  </button>
+                  <div class="relative">
+                    <select id="admin-survey-select" onchange="app.handleAdminSurveyChange()" class="block w-full md:w-64 pl-4 pr-10 py-2.5 text-base border-slate-300 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm rounded-xl shadow-sm bg-white">
+                      <!-- Options injected -->
+                    </select>
+                  </div>
+                </div>
+             </div>
+
+             <!-- Stats Card -->
+             <div class="mb-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between">
+                 <div class="flex items-center gap-6">
+                    <div class="bg-brand-50 p-4 rounded-2xl">
+                        <svg class="h-10 w-10 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-slate-500 text-sm font-semibold uppercase tracking-wider">總回覆數</h3>
+                        <p id="admin-total-responses" class="text-4xl font-bold text-brand-600 tracking-tight">0</p>
+                    </div>
+                 </div>
+                 <div class="flex flex-col items-end">
+                     <div class="flex items-center text-slate-600 font-mono bg-slate-100 px-3 py-1.5 rounded-lg text-sm mb-2">
+                        <span id="admin-current-pin" class="font-bold">PIN: ----</span>
+                     </div>
+                 </div>
+             </div>
+
+             <!-- Table -->
+             <div class="bg-white shadow-sm border border-slate-200 rounded-3xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-100">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">學生資訊</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">家長姓名</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">提交時間</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">備註</th>
+                                <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">功能</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-response-table" class="bg-white divide-y divide-slate-50"></tbody>
+                    </table>
+                </div>
+             </div>
+        </section>
+
+        <!-- VIEW: Receipt -->
+        <section id="view-receipt" class="max-w-md mx-auto mt-12 px-4 animate-slide-up hidden pb-20">
+            <div class="bg-white rounded-3xl shadow-2xl shadow-green-100 overflow-hidden relative">
+                <div class="bg-emerald-500 h-32 flex items-center justify-center relative">
+                    <div class="bg-white p-4 rounded-full shadow-lg transform translate-y-8">
+                        <svg class="h-16 w-16 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                </div>
+                <div class="pt-12 pb-8 px-8 text-center">
+                    <h2 class="text-2xl font-bold text-slate-800 mb-2">提交成功！</h2>
+                    <p class="text-slate-500 text-sm mb-8">您的回條已成功傳送至學校系統</p>
+                    <div id="receipt-details" class="bg-slate-50 rounded-2xl p-6 border border-slate-100 text-left space-y-4 mb-8">
+                        <!-- Details injected -->
+                    </div>
+                    <button onclick="app.navigate('home')" class="w-full py-4 rounded-xl font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors shadow-lg">返回首頁</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal: PIN Verification -->
+    <div id="modal-pin" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
+        <div class="bg-white rounded-3xl max-w-sm w-full shadow-2xl p-8 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-brand-400 to-brand-600"></div>
+            <div class="text-center mb-8">
+                <div class="mx-auto w-16 h-16 bg-brand-50 rounded-full flex items-center justify-center mb-4">
+                    <svg class="h-8 w-8 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                </div>
+                <h3 class="text-2xl font-bold text-slate-800">請輸入驗證碼</h3>
+                <p class="text-slate-500 text-sm mt-2">請輸入老師提供的 4 位數驗證碼</p>
+            </div>
+            <div class="flex justify-center gap-4 mb-6" id="pin-inputs">
+                <input type="text" maxlength="1" class="pin-digit w-12 h-14 border-2 border-slate-200 rounded-xl text-center text-2xl font-bold focus:border-brand-500 outline-none">
+                <input type="text" maxlength="1" class="pin-digit w-12 h-14 border-2 border-slate-200 rounded-xl text-center text-2xl font-bold focus:border-brand-500 outline-none">
+                <input type="text" maxlength="1" class="pin-digit w-12 h-14 border-2 border-slate-200 rounded-xl text-center text-2xl font-bold focus:border-brand-500 outline-none">
+                <input type="text" maxlength="1" class="pin-digit w-12 h-14 border-2 border-slate-200 rounded-xl text-center text-2xl font-bold focus:border-brand-500 outline-none">
+            </div>
+            <div id="pin-error" class="hidden text-center text-red-500 text-sm font-bold mb-4"></div>
+            <button onclick="app.verifyPin()" class="w-full py-3.5 rounded-xl font-bold text-white bg-brand-600 hover:bg-brand-700 transition-colors shadow-lg mb-3">驗證並提交</button>
+            <button onclick="document.getElementById('modal-pin').classList.add('hidden')" class="w-full py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors">取消</button>
+        </div>
+    </div>
+
+    <!-- Modal: Create Survey -->
+    <div id="modal-create" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
+        <div class="bg-white rounded-3xl max-w-lg w-full shadow-2xl p-8">
+            <h3 class="text-xl font-bold text-slate-900 mb-6">建立新調查</h3>
+            <form onsubmit="app.submitNewSurvey(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">標題</label>
+                    <input id="new-survey-title" required class="w-full px-4 py-2 border rounded-xl">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">說明</label>
+                    <textarea id="new-survey-desc" required rows="3" class="w-full px-4 py-2 border rounded-xl"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">截止日期</label>
+                    <input id="new-survey-deadline" type="date" required class="w-full px-4 py-2 border rounded-xl">
+                </div>
+                <div class="flex space-x-3 pt-4">
+                    <button type="button" onclick="document.getElementById('modal-create').classList.add('hidden')" class="flex-1 py-3 border rounded-xl text-slate-600">取消</button>
+                    <button type="submit" class="flex-1 py-3 bg-brand-600 text-white rounded-xl font-bold">建立</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Certificate Preview -->
+    <div id="modal-certificate" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[70] p-4 animate-fade-in" onclick="this.classList.add('hidden')">
+        <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
+            <div class="bg-slate-900 px-6 py-5 flex justify-between items-center border-b border-slate-800">
+                <h3 class="text-lg font-bold text-white">數位簽署驗證憑證</h3>
+                <button onclick="document.getElementById('modal-certificate').classList.add('hidden')" class="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <div class="bg-emerald-50 border-b border-emerald-100 px-6 py-3 text-center text-sm font-bold text-emerald-800">
+                身分驗證通過 (VERIFIED)
+            </div>
+            <div id="certificate-content" class="p-6">
+                <!-- Content injected via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
