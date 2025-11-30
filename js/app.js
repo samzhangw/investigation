@@ -1,6 +1,5 @@
 
 
-
 /**
  * Main Application Logic
  */
@@ -63,31 +62,84 @@ const app = {
         const target = document.getElementById(`view-${viewId}`);
         if(target) target.classList.remove('hidden');
 
-        // Update nav buttons
-        document.getElementById('btn-nav-home').className = viewId === 'home' 
-            ? 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 bg-white text-brand-700 shadow-sm whitespace-nowrap'
-            : 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700 whitespace-nowrap';
+        // Update nav buttons (Desktop)
+        const btnHome = document.getElementById('btn-nav-home');
+        const btnInquiry = document.getElementById('btn-nav-inquiry');
+        
+        if (btnHome) {
+            btnHome.className = viewId === 'home' 
+                ? 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 bg-white text-brand-700 shadow-sm whitespace-nowrap'
+                : 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700 whitespace-nowrap';
+        }
             
-        document.getElementById('btn-nav-inquiry').className = viewId === 'inquiry'
-            ? 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 bg-white text-brand-700 shadow-sm whitespace-nowrap'
-            : 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700 whitespace-nowrap';
+        if (btnInquiry) {
+            btnInquiry.className = viewId === 'inquiry'
+                ? 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 bg-white text-brand-700 shadow-sm whitespace-nowrap'
+                : 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700 whitespace-nowrap';
+        }
 
         app.state.currentView = viewId;
+        
+        // Auto close mobile menu if open
+        app.closeMobileMenu();
     },
 
     switchRole: (role) => {
         app.state.role = role;
+        
+        // Sync selectors (Desktop & Mobile)
+        const roleSelect = document.getElementById('role-select');
+        const mobileRoleSelect = document.getElementById('mobile-role-select');
+        if (roleSelect) roleSelect.value = role;
+        if (mobileRoleSelect) mobileRoleSelect.value = role;
+
         if (role === 'admin') {
             document.getElementById('nav-student').classList.add('hidden');
             document.getElementById('nav-admin').classList.remove('hidden');
+            
+            // Mobile Menu
+            document.getElementById('mobile-nav-student').classList.add('hidden');
+            document.getElementById('mobile-nav-admin').classList.remove('hidden');
+
             app.navigate('admin');
             app.renderAdminDashboard();
         } else {
             document.getElementById('nav-student').classList.remove('hidden');
             document.getElementById('nav-admin').classList.add('hidden');
+            
+            // Mobile Menu
+            document.getElementById('mobile-nav-student').classList.remove('hidden');
+            document.getElementById('mobile-nav-admin').classList.add('hidden');
+
             app.navigate('home');
             app.checkAnnouncement(); // Re-check as student
         }
+    },
+    
+    // --- Mobile Menu Logic ---
+    toggleMobileMenu: () => {
+        const overlay = document.getElementById('mobile-menu-overlay');
+        const drawer = document.getElementById('mobile-menu-drawer');
+        
+        if (overlay.classList.contains('hidden')) {
+            overlay.classList.remove('hidden');
+            // Small delay to allow display block to apply before transform
+            setTimeout(() => {
+                drawer.classList.remove('translate-x-full');
+            }, 10);
+        } else {
+            app.closeMobileMenu();
+        }
+    },
+    
+    closeMobileMenu: () => {
+        const overlay = document.getElementById('mobile-menu-overlay');
+        const drawer = document.getElementById('mobile-menu-drawer');
+        
+        drawer.classList.add('translate-x-full');
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+        }, 300); // Wait for transition
     },
 
     setLoading: (isLoading, message = "資料讀取中...") => {
@@ -111,7 +163,18 @@ const app = {
                 String(now.getHours()).padStart(2,'0') + ':' + 
                 String(now.getMinutes()).padStart(2,'0') + ':' + 
                 String(now.getSeconds()).padStart(2,'0');
-            document.getElementById('clock-display').innerText = str;
+            
+            const desktopClock = document.getElementById('clock-display');
+            if (desktopClock) desktopClock.innerText = str;
+            
+            // Simple format for mobile
+             const mobileStr = String(now.getMonth()+1).padStart(2,'0') + '/' + 
+                String(now.getDate()).padStart(2,'0') + ' ' + 
+                String(now.getHours()).padStart(2,'0') + ':' + 
+                String(now.getMinutes()).padStart(2,'0');
+            
+            const mobileClock = document.getElementById('mobile-clock-display');
+            if (mobileClock) mobileClock.innerText = mobileStr;
         };
         setInterval(update, 1000);
         update();
@@ -952,7 +1015,7 @@ const app = {
         const tbody = document.getElementById('admin-response-table');
         const mobileList = document.getElementById('admin-response-mobile-list');
         
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">載入中...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">載入中...</td></tr>';
         mobileList.innerHTML = '<div class="text-center py-4 text-slate-500">載入中...</div>';
         
         try {
@@ -975,7 +1038,7 @@ const app = {
             app.renderAnalytics(responses, survey);
 
             if(responses.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">尚無回覆</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">尚無回覆</td></tr>';
                 mobileList.innerHTML = '<div class="text-center py-8 text-slate-400">尚無回覆</div>';
                 return;
             }
@@ -994,8 +1057,12 @@ const app = {
                     </td>
                     <td class="px-6 py-4 text-sm text-slate-700 font-medium">${r.parentName}</td>
                     <td class="px-6 py-4 text-xs text-slate-500">${new Date(r.submittedAt).toLocaleString()}</td>
+                    <!-- 新增備註欄位 -->
+                    <td class="px-6 py-4 text-sm text-slate-600 max-w-xs truncate" title="${r.comments || ''}">
+                        ${r.comments || '<span class="text-slate-300 italic">無</span>'}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        <button onclick='app.showCertificate(${JSON.stringify(r).replace(/'/g, "&#39;")})' class="text-xs bg-brand-50 text-brand-700 px-3 py-1 rounded-full border border-brand-200">詳情</button>
+                        <button onclick='app.showCertificate(${JSON.stringify(r).replace(/'/g, "&#39;")})' class="text-xs bg-brand-50 text-brand-700 px-3 py-1 rounded-full border border-brand-200 hover:bg-brand-100 transition-colors">詳情</button>
                     </td>
                 </tr>
             `).join('');
@@ -1011,7 +1078,7 @@ const app = {
                         <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">${new Date(r.submittedAt).toLocaleDateString()}</span>
                     </div>
                     <div class="text-sm text-slate-600 mb-1"><span class="font-bold text-slate-400 text-xs uppercase mr-2">家長</span>${r.parentName}</div>
-                    ${r.comments ? `<div class="text-sm text-slate-500 mb-3 bg-slate-50 p-2 rounded">${r.comments}</div>` : ''}
+                    ${r.comments ? `<div class="text-sm text-slate-500 mb-3 bg-slate-50 p-2 rounded border border-slate-100">${r.comments}</div>` : ''}
                     <div class="flex justify-end mt-2">
                          <button onclick='app.showCertificate(${JSON.stringify(r).replace(/'/g, "&#39;")})' class="text-xs font-bold text-brand-600 border border-brand-200 bg-brand-50 px-4 py-2 rounded-lg w-full sm:w-auto">查看詳情 & 驗證</button>
                     </div>
@@ -1103,7 +1170,8 @@ const app = {
         const responses = app.state.currentAdminResponses || [];
         if(!responses.length) return alert("無資料可匯出");
 
-        const headers = ["班級", "學生姓名", "學號", "家長姓名", "提交時間", "備註", "回答內容", "驗證狀態", "IP", "流水號"];
+        // FIX: 調整欄位順序以符合行政需求
+        const headers = ["提交時間", "班級", "學號", "學生姓名", "家長姓名", "回答內容", "備註", "驗證狀態", "IP", "流水號"];
         const rows = responses.map(r => {
             // Flatten answers to string
             let answersStr = "";
@@ -1112,13 +1180,13 @@ const app = {
             }
 
             return [
-                r.studentClass || "",
-                r.studentName,
-                r.studentId,
-                r.parentName,
                 new Date(r.submittedAt).toLocaleString(),
-                String(r.comments || "").replace(/(\r\n|\n|\r)/gm, " "),
+                r.studentClass || "",
+                r.studentId,
+                r.studentName,
+                r.parentName,
                 answersStr,
+                String(r.comments || "").replace(/(\r\n|\n|\r)/gm, " "),
                 r.securityMetadata?.verifiedByPin ? "已驗證" : "未驗證",
                 r.securityMetadata?.ipAddress || "",
                 r.id
@@ -1240,46 +1308,77 @@ const app = {
             answersHtml = Object.entries(r.answers).map(([label, val]) => `
                 <div class="mb-3 border-b border-slate-100 pb-2 last:border-0">
                     <div class="text-xs text-slate-500 font-bold mb-1">${label}</div>
-                    <div class="text-sm text-slate-800 break-words">${Array.isArray(val) ? val.join(', ') : val}</div>
+                    <div class="text-sm text-slate-800 break-words font-medium">${Array.isArray(val) ? val.join(', ') : val}</div>
                 </div>
             `).join('');
         }
 
+        // FIX: 優化欄位對照，建立清晰的「學生資料」與「填寫內容」分區
         content.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                 <!-- 簽名區塊 -->
-                <div class="col-span-1 md:col-span-2">
-                    <div class="border-2 border-slate-200 rounded-xl bg-slate-50 h-32 flex items-center justify-center overflow-hidden mb-2 relative">
+            <div class="space-y-6">
+                <!-- 1. 學生基本資料區 -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <h4 class="font-bold text-slate-800 mb-3 flex items-center text-sm border-b border-slate-200 pb-2">
+                        <svg class="w-4 h-4 mr-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" /></svg>
+                        學生基本資料
+                    </h4>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <span class="text-xs font-bold text-slate-400 uppercase block mb-1">班級</span>
+                            <span class="text-sm font-bold text-slate-800">${r.studentClass || '-'}</span>
+                        </div>
+                        <div>
+                            <span class="text-xs font-bold text-slate-400 uppercase block mb-1">學號</span>
+                            <span class="text-sm font-mono text-slate-800">${r.studentId}</span>
+                        </div>
+                        <div>
+                            <span class="text-xs font-bold text-slate-400 uppercase block mb-1">學生姓名</span>
+                            <span class="text-sm font-bold text-slate-800">${r.studentName}</span>
+                        </div>
+                        <div>
+                            <span class="text-xs font-bold text-slate-400 uppercase block mb-1">家長姓名</span>
+                            <span class="text-sm font-bold text-slate-800">${r.parentName}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 簽名區塊 -->
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase block mb-2">家長簽名</span>
+                    <div class="border-2 border-slate-200 rounded-xl bg-slate-50 h-32 flex items-center justify-center overflow-hidden relative">
                         <div class="absolute inset-0 opacity-[0.05]" style="background-image: radial-gradient(#000 1px, transparent 1px); background-size: 10px 10px;"></div>
                         <img src="${r.signatureDataUrl}" class="max-h-24 relative z-10" />
                     </div>
                 </div>
-                
-                <div class="col-span-1 md:col-span-2 mb-2">
-                     <span class="inline-block px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100">
-                        ${r.studentClass || '未填班級'} - ${r.studentName}
-                     </span>
-                </div>
 
-                <!-- 詳細回答區塊 -->
-                <div class="col-span-1 md:col-span-2">
-                    <h4 class="font-bold text-slate-800 mb-2 flex items-center text-sm sm:text-base">
-                        <svg class="w-4 h-4 mr-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                        填寫內容詳細
+                <!-- 3. 詳細回答區塊 -->
+                <div>
+                    <h4 class="font-bold text-slate-800 mb-2 flex items-center text-sm">
+                        <svg class="w-4 h-4 mr-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        問卷回答內容
                     </h4>
                     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm max-h-60 overflow-y-auto">
                         ${answersHtml}
                     </div>
                 </div>
 
-                <!-- Metadata -->
-                <div class="bg-slate-50 p-3 rounded-lg border">
-                    <span class="text-xs text-slate-400 font-bold block">PIN 驗證</span>
-                    <span class="font-mono font-bold text-slate-800 text-sm">${r.securityMetadata?.verifiedByPin ? 'PASS' : 'FAIL'}</span>
-                </div>
-                <div class="bg-slate-50 p-3 rounded-lg border">
-                    <span class="text-xs text-slate-400 font-bold block">IP 位址</span>
-                    <span class="font-mono text-slate-800 text-sm break-all">${r.securityMetadata?.ipAddress || 'Unknown'}</span>
+                <!-- 4. 備註 -->
+                ${r.comments ? `
+                <div class="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+                    <span class="text-xs text-yellow-600 font-bold block mb-1">家長備註/意見</span>
+                    <p class="text-sm text-slate-700">${r.comments}</p>
+                </div>` : ''}
+
+                <!-- 5. Metadata -->
+                <div class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                    <div class="bg-slate-50 p-2 rounded border">
+                        <span class="text-[10px] text-slate-400 font-bold block">驗證狀態</span>
+                        <span class="font-mono font-bold text-slate-800 text-xs">${r.securityMetadata?.verifiedByPin ? 'PIN VERIFIED' : 'UNVERIFIED'}</span>
+                    </div>
+                    <div class="bg-slate-50 p-2 rounded border">
+                        <span class="text-[10px] text-slate-400 font-bold block">IP / Device</span>
+                        <span class="font-mono text-slate-600 text-[10px] block truncate">${r.securityMetadata?.ipAddress || 'Unknown'} / ${r.securityMetadata?.deviceType || '-'}</span>
+                    </div>
                 </div>
             </div>
         `;
