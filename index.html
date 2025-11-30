@@ -30,6 +30,8 @@
               'fade-in': 'fadeIn 0.5s ease-out',
               'slide-up': 'slideUp 0.5s ease-out',
               'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'pulse-ring': 'loader-pulse-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite',
+              'loader-float': 'loader-float 2s ease-in-out infinite',
             },
             keyframes: {
               fadeIn: {
@@ -39,6 +41,14 @@
               slideUp: {
                 '0%': { transform: 'translateY(20px)', opacity: '0' },
                 '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              'loader-float': {
+                '0%, 100%': { transform: 'translateY(0) scale(1)' },
+                '50%': { transform: 'translateY(-3px) scale(1.05)' }
+              },
+              'loader-pulse-ring': {
+                '0%': { transform: 'scale(0.8)', opacity: '0.5' },
+                '100%': { transform: 'scale(1.5)', opacity: '0' }
               }
             }
           }
@@ -51,6 +61,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- QRCode.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- HTML5-QRCode Scanner -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script type="importmap">
 {
   "imports": {
@@ -64,7 +76,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased selection:bg-brand-100 selection:text-brand-900">
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-brand-100 selection:text-brand-900 flex flex-col min-h-screen">
 
     <!-- Navigation -->
     <nav class="glass-panel sticky top-0 z-50 border-b border-slate-200/60 shadow-sm backdrop-blur-md">
@@ -93,9 +105,14 @@
                     </div>
 
                     <!-- Role Based Nav Buttons -->
-                    <div id="nav-student" class="flex bg-slate-100/80 p-1 rounded-xl overflow-hidden">
+                    <div id="nav-student" class="flex bg-slate-100/80 p-1 rounded-xl overflow-hidden items-center">
                         <button onclick="app.navigate('home')" id="btn-nav-home" class="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700 whitespace-nowrap">待辦</button>
                         <button onclick="app.navigate('inquiry')" id="btn-nav-inquiry" class="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700 whitespace-nowrap">查詢</button>
+                        <div class="w-px h-4 bg-slate-300 mx-1"></div>
+                        <button onclick="app.openScanner()" class="px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 text-brand-600 hover:bg-white hover:shadow-sm flex items-center">
+                             <svg class="h-4 w-4 sm:h-5 sm:w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                             掃描
+                        </button>
                     </div>
                     
                     <div id="nav-admin" class="hidden">
@@ -117,7 +134,7 @@
     </nav>
 
     <!-- Main Content Area -->
-    <main class="min-h-screen pb-20 pt-4 sm:pt-8 px-4">
+    <main class="flex-grow pb-20 pt-4 sm:pt-8 px-4">
         
         <!-- Premium Loading Overlay -->
         <div id="loading-overlay" class="hidden fixed inset-0 bg-slate-50/95 backdrop-blur-md z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
@@ -315,8 +332,12 @@
         <section id="view-admin" class="max-w-7xl mx-auto px-0 sm:px-4 py-4 sm:py-8 animate-fade-in hidden">
              <!-- Admin Controls - Scrollable on mobile -->
              <div class="flex flex-col gap-4 mb-6 sm:mb-8">
-                <div>
-                  <h2 class="text-xl sm:text-2xl font-bold text-slate-900 px-2 sm:px-0">管理儀表板</h2>
+                <div class="flex justify-between items-center px-2 sm:px-0">
+                  <h2 class="text-xl sm:text-2xl font-bold text-slate-900">管理儀表板</h2>
+                  <button onclick="document.getElementById('view-logs').classList.remove('hidden'); document.getElementById('view-admin').classList.add('hidden'); app.renderSystemLogs();" class="text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                      <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      系統紀錄
+                  </button>
                 </div>
                 
                 <div class="w-full overflow-x-auto no-scrollbar pb-2">
@@ -346,22 +367,40 @@
                 </div>
              </div>
 
-             <!-- Stats Card -->
-             <div class="mx-2 sm:mx-0 mb-6 bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between">
-                 <div class="flex items-center gap-4 sm:gap-6">
-                    <div class="bg-brand-50 p-3 sm:p-4 rounded-2xl">
-                        <svg class="h-8 w-8 sm:h-10 sm:w-10 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+             <!-- Improved Stats Grid -->
+             <div class="mx-2 sm:mx-0 grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <!-- Total Responses -->
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex items-center hover:shadow-md transition-all">
+                    <div class="bg-brand-50 p-3.5 rounded-2xl mr-5">
+                        <svg class="h-8 w-8 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                     </div>
                     <div>
-                        <h3 class="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wider">總回覆數</h3>
-                        <p id="admin-total-responses" class="text-2xl sm:text-4xl font-bold text-brand-600 tracking-tight">0</p>
+                        <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">總回覆數</p>
+                        <p id="admin-stat-total" class="text-3xl font-bold text-slate-800">0</p>
                     </div>
-                 </div>
-                 <div class="flex flex-col items-end">
-                     <div class="flex items-center text-slate-600 font-mono bg-slate-100 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm mb-2">
-                        <span id="admin-current-pin" class="font-bold">PIN: ----</span>
-                     </div>
-                 </div>
+                </div>
+
+                <!-- Today's Responses -->
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex items-center hover:shadow-md transition-all">
+                    <div class="bg-emerald-50 p-3.5 rounded-2xl mr-5">
+                        <svg class="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                    <div>
+                         <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">今日新增</p>
+                         <p id="admin-stat-today" class="text-3xl font-bold text-slate-800">0</p>
+                    </div>
+                </div>
+
+                <!-- Current PIN -->
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex items-center hover:shadow-md transition-all">
+                    <div class="bg-purple-50 p-3.5 rounded-2xl mr-5">
+                        <svg class="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                    </div>
+                    <div>
+                         <p class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">驗證碼 (PIN)</p>
+                         <p id="admin-stat-pin" class="text-3xl font-bold text-slate-800 font-mono tracking-widest">----</p>
+                    </div>
+                </div>
              </div>
 
              <!-- Charts Container -->
@@ -394,6 +433,34 @@
              </div>
         </section>
 
+        <!-- VIEW: System Logs -->
+        <section id="view-logs" class="max-w-7xl mx-auto px-0 sm:px-4 py-4 sm:py-8 animate-fade-in hidden">
+             <div class="flex items-center gap-4 mb-6 px-2 sm:px-0">
+                  <button onclick="document.getElementById('view-admin').classList.remove('hidden'); document.getElementById('view-logs').classList.add('hidden');" class="text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                      <svg class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                      返回儀表板
+                  </button>
+                  <h2 class="text-xl sm:text-2xl font-bold text-slate-900">系統操作紀錄</h2>
+             </div>
+             <div class="bg-white shadow-sm border border-slate-200 rounded-2xl overflow-hidden">
+                 <div class="overflow-x-auto">
+                     <table class="min-w-full divide-y divide-slate-100">
+                         <thead class="bg-slate-50">
+                             <tr>
+                                 <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">時間</th>
+                                 <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">動作</th>
+                                 <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">操作者</th>
+                                 <th class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">詳情</th>
+                             </tr>
+                         </thead>
+                         <tbody id="system-logs-table" class="bg-white divide-y divide-slate-50">
+                             <tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">載入中...</td></tr>
+                         </tbody>
+                     </table>
+                 </div>
+             </div>
+        </section>
+
         <!-- VIEW: Receipt -->
         <section id="view-receipt" class="max-w-md mx-auto mt-8 sm:mt-12 px-4 animate-slide-up hidden pb-20">
             <div class="bg-white rounded-3xl shadow-2xl shadow-green-100 overflow-hidden relative">
@@ -413,6 +480,11 @@
             </div>
         </section>
     </main>
+    
+    <!-- Footer -->
+    <footer class="py-8 text-center border-t border-slate-200/60 mt-auto bg-white/50 backdrop-blur-sm">
+        <p class="text-slate-400 text-xs font-medium">© 2024 SchoolConnect 家校通智慧系統 | Designed for Education</p>
+    </footer>
 
     <!-- Modal: PIN Verification -->
     <div id="modal-pin" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-fade-in">
@@ -455,9 +527,16 @@
                         <label class="block text-sm font-semibold text-slate-700 mb-1">詳細說明</label>
                         <textarea id="new-survey-desc" required rows="3" class="w-full px-4 py-2 sm:py-3 border rounded-xl focus:border-brand-500 focus:ring-4 focus:ring-brand-100 outline-none text-base"></textarea>
                     </div>
-                    <div class="space-y-2">
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">截止日期</label>
-                        <input id="new-survey-deadline" type="date" required class="w-full px-4 py-2 sm:py-3 border rounded-xl focus:border-brand-500 outline-none text-base">
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">開始時間</label>
+                            <input id="new-survey-start" type="datetime-local" required class="w-full px-4 py-2 sm:py-3 border rounded-xl focus:border-brand-500 outline-none text-base">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">結束時間</label>
+                            <input id="new-survey-end" type="datetime-local" required class="w-full px-4 py-2 sm:py-3 border rounded-xl focus:border-brand-500 outline-none text-base">
+                        </div>
                     </div>
 
                     <!-- Question Builder -->
@@ -547,6 +626,22 @@
              <button onclick="document.getElementById('modal-share').classList.add('hidden')" class="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">
                  關閉
              </button>
+        </div>
+    </div>
+
+    <!-- Modal: Scanner -->
+    <div id="modal-scanner" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[70] p-4 animate-fade-in" onclick="app.closeScanner()">
+        <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden relative" onclick="event.stopPropagation()">
+            <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+                <h3 class="text-lg font-bold">掃描 QR Code</h3>
+                <button onclick="app.closeScanner()" class="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <div class="p-4 bg-black">
+                <div id="reader" style="width: 100%; min-height: 250px;"></div>
+            </div>
+            <div class="p-4 text-center text-sm text-slate-500">
+                請將鏡頭對準調查表單的 QR Code
+            </div>
         </div>
     </div>
 

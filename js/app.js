@@ -13,7 +13,8 @@ const app = {
         signatureHistory: [], // For Undo
         newSurveyQuestions: [], // For Survey Builder
         charts: [], // Store chart instances to destroy them later
-        draftDebounceTimer: null
+        draftDebounceTimer: null,
+        html5QrCode: null // Scanner instance
     },
 
     // Initialization
@@ -164,6 +165,7 @@ const app = {
         
         try {
             await API.saveAnnouncement({ title, content, isActive });
+            app.logAction("發布公告", `${title} (啟用: ${isActive})`);
             alert("公告設定已更新！");
         } catch(e) {
             alert("儲存失敗");
@@ -203,6 +205,73 @@ const app = {
         });
     },
 
+    // --- QR Scanner Logic ---
+    openScanner: () => {
+        document.getElementById('modal-scanner').classList.remove('hidden');
+        
+        // Initialize scanner if not already done
+        if (!app.state.html5QrCode) {
+            app.state.html5QrCode = new Html5Qrcode("reader");
+        }
+
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        
+        // Start scanning
+        app.state.html5QrCode.start(
+            { facingMode: "environment" }, 
+            config, 
+            app.onScanSuccess, 
+            (errorMessage) => {
+                // parse error, ignore it.
+            }
+        ).catch(err => {
+            alert("無法啟動相機，請確認瀏覽器權限");
+            document.getElementById('modal-scanner').classList.add('hidden');
+        });
+    },
+
+    closeScanner: () => {
+        if (app.state.html5QrCode) {
+            app.state.html5QrCode.stop().then(() => {
+                document.getElementById('modal-scanner').classList.add('hidden');
+            }).catch(err => {
+                console.error("Failed to stop scanner", err);
+                document.getElementById('modal-scanner').classList.add('hidden');
+            });
+        } else {
+             document.getElementById('modal-scanner').classList.add('hidden');
+        }
+    },
+
+    onScanSuccess: (decodedText, decodedResult) => {
+        // Stop scanning
+        app.closeScanner();
+        
+        try {
+            // Check if URL belongs to this app
+            if (decodedText.includes("surveyId=")) {
+                const url = new URL(decodedText);
+                const surveyId = url.searchParams.get("surveyId");
+                
+                if (surveyId) {
+                    const survey = app.state.surveys.find(s => s.id === surveyId);
+                    if (survey) {
+                         if (confirm(`掃描成功！是否開啟調查：\n${survey.title}`)) {
+                             app.openSurveyForm(surveyId);
+                         }
+                    } else {
+                        alert("找不到對應的調查 ID");
+                    }
+                }
+            } else {
+                alert("無效的 QR Code格式");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("解析 QR Code 失敗");
+        }
+    },
+
     // Survey Logic
     loadSurveys: async () => {
         app.setLoading(true, "正在載入調查資料...");
@@ -225,21 +294,43 @@ const app = {
             return;
         }
 
+        const now = new Date().getTime();
+
         container.innerHTML = app.state.surveys.map(survey => {
-            const isActive = survey.status === 'ACTIVE';
+            const start = new Date(survey.startTime || 0).getTime();
+            const end = new Date(survey.deadline).getTime();
+            
+            let status = 'upcoming'; // default
+            if (now >= start && now <= end) status = 'active';
+            else if (now > end) status = 'closed';
+
+            const badgeClass = {
+                'active': 'bg-green-100 text-green-700',
+                'closed': 'bg-slate-100 text-slate-500',
+                'upcoming': 'bg-yellow-100 text-yellow-700'
+            }[status];
+
+            const badgeText = {
+                'active': '進行中',
+                'closed': '已結束',
+                'upcoming': '即將開始'
+            }[status];
+
+            const isActive = status === 'active';
+
             return `
             <div class="group relative bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 overflow-hidden flex flex-col h-full">
                 <div class="absolute top-0 left-0 w-full h-1.5 ${isActive ? 'bg-brand-500' : 'bg-slate-300'}"></div>
                 <div class="flex justify-between items-start mb-4">
-                    <span class="px-3 py-1 text-xs font-bold rounded-full ${isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}">
-                        ${isActive ? '進行中' : '已結束'}
+                    <span class="px-3 py-1 text-xs font-bold rounded-full ${badgeClass}">
+                        ${badgeText}
                     </span>
-                    <span class="text-xs font-medium text-slate-400">截止: ${survey.deadline}</span>
+                    <span class="text-xs font-medium text-slate-400">截止: ${survey.deadline.replace('T', ' ')}</span>
                 </div>
                 <h3 class="text-lg sm:text-xl font-bold text-slate-800 mb-2 sm:mb-3 group-hover:text-brand-600">${survey.title}</h3>
                 <p class="text-slate-500 mb-6 text-sm line-clamp-2 flex-grow">${survey.description}</p>
                 <button onclick="app.openSurveyForm('${survey.id}')" ${!isActive ? 'disabled' : ''} class="w-full py-3 px-4 rounded-xl font-bold text-sm transition-all ${isActive ? 'bg-slate-50 text-brand-700 hover:bg-brand-600 hover:text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}">
-                    ${isActive ? '前往填寫' : '已截止'}
+                    ${isActive ? '前往填寫' : (status === 'upcoming' ? '尚未開始' : '已截止')}
                 </button>
             </div>`;
         }).join('');
@@ -253,7 +344,7 @@ const app = {
         // Populate Form
         document.getElementById('form-survey-title').innerText = survey.title;
         document.getElementById('form-survey-desc').innerText = survey.description;
-        document.getElementById('form-survey-deadline').innerText = survey.deadline;
+        document.getElementById('form-survey-deadline').innerText = survey.deadline.replace('T', ' ');
         
         // Render Dynamic Questions
         app.renderDynamicQuestions(survey.questions || []);
@@ -509,13 +600,22 @@ const app = {
             points = [];
             
             // Save state for undo BEFORE drawing new stroke
-            // We use getImageData at native resolution (not CSS pixels)
             app.state.signatureHistory.push(
                 ctx.getImageData(0, 0, canvas.width, canvas.height)
             );
             
             const coords = getCoords(e);
             points.push(coords);
+            
+            // FIX: 確保下筆時重置路徑並移動到正確起點
+            ctx.beginPath();
+            ctx.moveTo(coords.x, coords.y);
+            // 畫一個小圓點，讓單點也能顯示
+            ctx.arc(coords.x, coords.y, 1, 0, Math.PI * 2); 
+            ctx.fill();
+            // 重新開始路徑準備畫線
+            ctx.beginPath();
+            ctx.moveTo(coords.x, coords.y);
             
             document.getElementById('signature-placeholder').classList.add('hidden');
         };
@@ -537,30 +637,29 @@ const app = {
                     y: (p1.y + p2.y) / 2
                 };
 
+                const p0 = points[points.length - 3];
+                
                 ctx.beginPath();
-                // Move to the last point (or start)
+
+                // FIX: 修正第一段線條的繪製邏輯
                 if (points.length === 3) {
+                    // 如果是剛開始，必須從第一點(p0)連到中點
                     ctx.moveTo(points[0].x, points[0].y);
                 } else {
-                    // We need to track where the last curve ended. 
-                    // Actually, simpler approach for live drawing:
-                    // Just draw curve from p1 to midPoint using p1 as control? No.
-                    // Standard approach: Curve from Mid(p0, p1) to Mid(p1, p2) with p1 control.
-                    
-                    // Simplified implementation for live buffer:
-                    // Just draw small segments is choppy.
-                    // Let's use the simple mid-point algo.
-                    
-                    // We redraw the last segment properly:
-                    const p0 = points[points.length - 3];
-                    const mid1 = { x: (p0.x + p1.x)/2, y: (p0.y + p1.y)/2 };
-                    const mid2 = { x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2 };
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(mid1.x, mid1.y);
-                    ctx.quadraticCurveTo(p1.x, p1.y, mid2.x, mid2.y);
-                    ctx.stroke();
+                    // 之後的線段，從上一個中點連到新的中點
+                    // 重新計算上一個中點位置
+                    const prevP0 = points[points.length - 4];
+                    const prevP1 = points[points.length - 3];
+                    const prevMid = { 
+                        x: (prevP0.x + prevP1.x)/2, 
+                        y: (prevP0.y + prevP1.y)/2 
+                    };
+                    ctx.moveTo(prevMid.x, prevMid.y);
                 }
+                
+                // 使用 p1 當作控制點，畫到新的 midPoint
+                ctx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
+                ctx.stroke();
             }
             
             app.state.hasSignature = true;
@@ -570,14 +669,6 @@ const app = {
         const end = (e) => {
             if(e.cancelable) e.preventDefault();
             isDrawing = false;
-            // Handle single dot
-            if (points.length === 1) {
-                const p = points[0];
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, ctx.lineWidth / 2, 0, Math.PI * 2);
-                ctx.fill();
-                app.state.hasSignature = true;
-            }
         };
 
         canvas.addEventListener('mousedown', start);
@@ -598,21 +689,12 @@ const app = {
             // Restore native pixel data
             ctx.putImageData(lastState, 0, 0);
             
+            // Check if history is empty (back to blank)
             if (app.state.signatureHistory.length === 0) {
-                 // Check if canvas is actually empty visually? 
-                 // If we popped to empty state, it might still have lines if we pushed empty state at start?
-                 // Our logic pushes BEFORE stroke. So if history is empty, canvas might still have 1 stroke?
-                 // No, we push current state (which might be empty).
-                 // So if history is empty, it means we are at the very beginning (or user didn't draw yet)
-                 // But wait, undo action restores the state.
-                 // So if we just restored the last state, is that state empty?
-                 // Simple check:
-                 // app.state.hasSignature = ??? (hard to know without pixel scanning)
-                 // For UX, just keep badge if history > 0 or assume user knows.
-                 // Better: If history is empty, it means we reverted to initial state (blank).
+                 // Potentially hide badge if logic allows strict check, but simple implementation:
+                 // app.state.hasSignature = false; 
+                 // document.getElementById('signature-success-badge').classList.add('hidden');
             }
-        } else {
-            // Nothing to undo
         }
     },
 
@@ -753,6 +835,7 @@ const app = {
 
         try {
             const res = await API.saveResponse(data);
+            app.logAction("提交回條", `${data.studentClass} ${data.studentName} (${data.surveyId})`);
             app.clearDraft(data.surveyId); // Clear draft on success
             app.showReceipt(res);
         } catch (err) {
@@ -813,12 +896,50 @@ const app = {
         }
     },
 
+    // System Logs
+    renderSystemLogs: async () => {
+        const tbody = document.getElementById('system-logs-table');
+        tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">載入中...</td></tr>';
+        
+        try {
+            const logs = await API.fetch('getSystemLogs');
+            if (!logs || logs.length === 0) {
+                 tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">無紀錄</td></tr>';
+                 return;
+            }
+            
+            tbody.innerHTML = logs.map(log => `
+                <tr class="hover:bg-slate-50 border-b border-slate-50">
+                    <td class="px-6 py-3 text-sm text-slate-500 font-mono">${new Date(log.timestamp).toLocaleString()}</td>
+                    <td class="px-6 py-3 text-sm font-bold text-slate-700">${log.action}</td>
+                    <td class="px-6 py-3 text-sm text-slate-600">${log.user}</td>
+                    <td class="px-6 py-3 text-xs text-slate-400 truncate max-w-xs" title="${log.details}">${log.details}</td>
+                </tr>
+            `).join('');
+            
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-red-400">無法載入紀錄</td></tr>';
+        }
+    },
+    
+    logAction: async (action, details) => {
+        try {
+            // Non-blocking log
+            API.fetch('logAction', 'POST', { action, details, user: app.state.role });
+        } catch (e) {
+            console.error("Failed to log", e);
+        }
+    },
+
     // Admin
     renderAdminDashboard: async () => {
         const select = document.getElementById('admin-survey-select');
         select.innerHTML = app.state.surveys.map(s => `<option value="${s.id}">${s.title}</option>`).join('');
         
         app.handleAdminSurveyChange();
+        
+        // Log admin access
+        app.logAction("存取管理儀表板", "");
     },
 
     handleAdminSurveyChange: async () => {
@@ -826,8 +947,6 @@ const app = {
         const survey = app.state.surveys.find(s => s.id === surveyId);
         if(!survey) return;
 
-        document.getElementById('admin-current-pin').innerText = `PIN: ${survey.pin}`;
-        
         // Load responses
         const tbody = document.getElementById('admin-response-table');
         const mobileList = document.getElementById('admin-response-mobile-list');
@@ -838,7 +957,18 @@ const app = {
         try {
             const responses = await API.getResponses(surveyId);
             app.state.currentAdminResponses = responses; // Save for CSV
-            document.getElementById('admin-total-responses').innerText = responses.length;
+            
+            // --- Update Stats (New 3-Column Grid) ---
+            document.getElementById('admin-stat-total').innerText = responses.length;
+            
+            // Calculate Today's submissions
+            const todayStr = new Date().toDateString();
+            const todayCount = responses.filter(r => new Date(r.submittedAt).toDateString() === todayStr).length;
+            document.getElementById('admin-stat-today').innerText = todayCount > 0 ? `+${todayCount}` : '0';
+
+            // Show PIN
+            document.getElementById('admin-stat-pin').innerText = survey.pin;
+
 
             // Render Charts
             app.renderAnalytics(responses, survey);
@@ -1000,6 +1130,8 @@ const app = {
         link.href = URL.createObjectURL(blob);
         link.download = `survey_export.csv`;
         link.click();
+        
+        app.logAction("匯出 Excel", `Count: ${responses.length}`);
     },
 
     openCreateSurveyModal: () => {
@@ -1011,23 +1143,28 @@ const app = {
 
     submitNewSurvey: async (e) => {
         e.preventDefault();
+        const start = document.getElementById('new-survey-start').value;
+        const end = document.getElementById('new-survey-end').value;
+
+        // Date check
+        if (new Date(start) >= new Date(end)) {
+            return alert("結束時間必須晚於開始時間");
+        }
+
         const data = {
             title: document.getElementById('new-survey-title').value,
             description: document.getElementById('new-survey-desc').value,
-            deadline: document.getElementById('new-survey-deadline').value,
+            startTime: start,
+            deadline: end,
             questions: app.state.newSurveyQuestions // Attach questions
         };
         
-        // Date check
-        if (new Date(data.deadline) < new Date().setHours(0,0,0,0)) {
-            return alert("截止日期不可早於今日");
-        }
-
         document.getElementById('modal-create').classList.add('hidden');
         app.setLoading(true, "建立調查中...");
 
         try {
             const newS = await API.createSurvey(data);
+            app.logAction("建立調查", `${data.title} (PIN: ${newS.pin})`);
             alert(`建立成功！ PIN: ${newS.pin}`);
             app.loadSurveys();
         } catch(err) {
