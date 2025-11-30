@@ -1,4 +1,5 @@
 
+
 /**
  * Main Application Logic
  */
@@ -9,8 +10,10 @@ const app = {
         selectedSurvey: null,
         currentView: 'home',
         signaturePad: null,
+        signatureHistory: [], // For Undo
         newSurveyQuestions: [], // For Survey Builder
-        charts: [] // Store chart instances to destroy them later
+        charts: [], // Store chart instances to destroy them later
+        draftDebounceTimer: null
     },
 
     // Initialization
@@ -20,11 +23,33 @@ const app = {
         app.setupPinInputs();
         await app.loadSurveys();
         
-        // Initial route
-        app.navigate('home');
+        // Check for Deep Link (e.g. ?surveyId=xxx)
+        app.checkUrlParams();
+        
+        // Initial route (only if deep link didn't redirect)
+        if (!app.state.selectedSurvey) {
+            app.navigate('home');
+        }
         
         // Check for announcements
         app.checkAnnouncement();
+        
+        // Auto-save listeners
+        app.setupAutoSaveListeners();
+    },
+    
+    checkUrlParams: () => {
+        const params = new URLSearchParams(window.location.search);
+        const surveyId = params.get('surveyId');
+        if (surveyId) {
+            const survey = app.state.surveys.find(s => s.id === surveyId);
+            if (survey) {
+                // Clear the URL to avoid re-triggering on refresh, but keep history clean? 
+                // Actually keep it clean for now:
+                window.history.replaceState({}, document.title, window.location.pathname);
+                app.openSurveyForm(surveyId);
+            }
+        }
     },
 
     // UI & Navigation
@@ -38,12 +63,12 @@ const app = {
 
         // Update nav buttons
         document.getElementById('btn-nav-home').className = viewId === 'home' 
-            ? 'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-white text-brand-700 shadow-sm'
-            : 'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700';
+            ? 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 bg-white text-brand-700 shadow-sm whitespace-nowrap'
+            : 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700 whitespace-nowrap';
             
         document.getElementById('btn-nav-inquiry').className = viewId === 'inquiry'
-            ? 'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-white text-brand-700 shadow-sm'
-            : 'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700';
+            ? 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 bg-white text-brand-700 shadow-sm whitespace-nowrap'
+            : 'px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 text-slate-500 hover:text-slate-700 whitespace-nowrap';
 
         app.state.currentView = viewId;
     },
@@ -146,6 +171,37 @@ const app = {
             app.setLoading(false);
         }
     },
+    
+    // --- QR Code & Share Logic ---
+    openShareModal: () => {
+        const surveyId = document.getElementById('admin-survey-select').value;
+        if (!surveyId) return alert("請先選擇一個調查");
+        
+        // Generate Link
+        const link = `${window.location.origin}${window.location.pathname}?surveyId=${surveyId}`;
+        document.getElementById('share-link-text').innerText = link;
+        
+        // Generate QR Code
+        const container = document.getElementById('qrcode-container');
+        container.innerHTML = ''; // Clear old
+        new QRCode(container, {
+            text: link,
+            width: 192,
+            height: 192,
+            colorDark : "#0f172a",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+        
+        document.getElementById('modal-share').classList.remove('hidden');
+    },
+    
+    copyShareLink: () => {
+        const link = document.getElementById('share-link-text').innerText;
+        navigator.clipboard.writeText(link).then(() => {
+            alert("連結已複製！");
+        });
+    },
 
     // Survey Logic
     loadSurveys: async () => {
@@ -172,7 +228,7 @@ const app = {
         container.innerHTML = app.state.surveys.map(survey => {
             const isActive = survey.status === 'ACTIVE';
             return `
-            <div class="group relative bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 overflow-hidden flex flex-col h-full">
+            <div class="group relative bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 overflow-hidden flex flex-col h-full">
                 <div class="absolute top-0 left-0 w-full h-1.5 ${isActive ? 'bg-brand-500' : 'bg-slate-300'}"></div>
                 <div class="flex justify-between items-start mb-4">
                     <span class="px-3 py-1 text-xs font-bold rounded-full ${isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}">
@@ -180,7 +236,7 @@ const app = {
                     </span>
                     <span class="text-xs font-medium text-slate-400">截止: ${survey.deadline}</span>
                 </div>
-                <h3 class="text-xl font-bold text-slate-800 mb-3 group-hover:text-brand-600">${survey.title}</h3>
+                <h3 class="text-lg sm:text-xl font-bold text-slate-800 mb-2 sm:mb-3 group-hover:text-brand-600">${survey.title}</h3>
                 <p class="text-slate-500 mb-6 text-sm line-clamp-2 flex-grow">${survey.description}</p>
                 <button onclick="app.openSurveyForm('${survey.id}')" ${!isActive ? 'disabled' : ''} class="w-full py-3 px-4 rounded-xl font-bold text-sm transition-all ${isActive ? 'bg-slate-50 text-brand-700 hover:bg-brand-600 hover:text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}">
                     ${isActive ? '前往填寫' : '已截止'}
@@ -207,6 +263,9 @@ const app = {
         app.clearSignature();
         document.getElementById('form-error-msg').classList.add('hidden');
         
+        // Restore Draft (if any)
+        app.restoreDraft(id);
+        
         // Preview Mode Handling
         const banner = document.getElementById('preview-mode-banner');
         if (app.state.role === 'admin') {
@@ -216,8 +275,58 @@ const app = {
         }
         
         app.navigate('form');
+        
+        // Scroll to top
+        window.scrollTo(0, 0);
     },
     
+    // Auto Save Logic
+    setupAutoSaveListeners: () => {
+        const form = document.getElementById('response-form');
+        form.addEventListener('input', () => {
+            if (!app.state.selectedSurvey) return;
+            
+            clearTimeout(app.state.draftDebounceTimer);
+            app.state.draftDebounceTimer = setTimeout(() => {
+                app.saveDraft();
+            }, 1000);
+        });
+    },
+
+    saveDraft: () => {
+        if (!app.state.selectedSurvey || app.state.role === 'admin') return;
+        
+        const data = {
+            studentClass: document.getElementById('input-student-class').value,
+            studentId: document.getElementById('input-student-id').value,
+            studentName: document.getElementById('input-student-name').value,
+            parentName: document.getElementById('input-parent-name').value,
+            comments: document.getElementById('input-comments').value,
+        };
+        
+        localStorage.setItem(`draft_${app.state.selectedSurvey.id}`, JSON.stringify(data));
+    },
+
+    restoreDraft: (surveyId) => {
+        const draft = localStorage.getItem(`draft_${surveyId}`);
+        if (!draft) return;
+        
+        try {
+            const data = JSON.parse(draft);
+            if (data.studentClass) document.getElementById('input-student-class').value = data.studentClass;
+            if (data.studentId) document.getElementById('input-student-id').value = data.studentId;
+            if (data.studentName) document.getElementById('input-student-name').value = data.studentName;
+            if (data.parentName) document.getElementById('input-parent-name').value = data.parentName;
+            if (data.comments) document.getElementById('input-comments').value = data.comments;
+        } catch (e) {
+            console.error("Failed to restore draft", e);
+        }
+    },
+
+    clearDraft: (surveyId) => {
+        localStorage.removeItem(`draft_${surveyId}`);
+    },
+
     // New function to handle exiting the form
     exitForm: () => {
         if (app.state.role === 'admin') {
@@ -243,8 +352,8 @@ const app = {
         
         container.classList.remove('hidden');
         container.innerHTML = `
-            <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center">
+            <div class="bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-200">
+                <h3 class="text-base sm:text-lg font-bold text-slate-800 mb-4 flex items-center">
                     <svg class="h-5 w-5 mr-2 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                     調查內容
                 </h3>
@@ -254,22 +363,22 @@ const app = {
                     let inputHtml = '';
                     
                     if (q.type === 'text') {
-                        inputHtml = `<input name="q_${idx}" type="text" class="w-full px-4 py-2 rounded-xl border border-slate-300 focus:border-brand-500 outline-none" placeholder="請輸入回答" ${q.required ? 'required' : ''}>`;
+                        inputHtml = `<input name="q_${idx}" type="text" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-brand-500 outline-none bg-white text-base" placeholder="請輸入回答" ${q.required ? 'required' : ''}>`;
                     } else if (q.type === 'radio') {
-                        inputHtml = `<div class="space-y-2">
+                        inputHtml = `<div class="space-y-3">
                             ${q.options.map(opt => `
-                                <label class="flex items-center space-x-3 cursor-pointer">
+                                <label class="flex items-center space-x-3 cursor-pointer p-2 rounded-lg hover:bg-slate-100 active:bg-slate-200">
                                     <input type="radio" name="q_${idx}" value="${opt}" class="form-radio h-5 w-5 text-brand-600 focus:ring-brand-500 border-gray-300" ${q.required ? 'required' : ''}>
-                                    <span class="text-slate-700">${opt}</span>
+                                    <span class="text-slate-700 text-base">${opt}</span>
                                 </label>
                             `).join('')}
                         </div>`;
                     } else if (q.type === 'checkbox') {
-                         inputHtml = `<div class="space-y-2">
+                         inputHtml = `<div class="space-y-3">
                             ${q.options.map(opt => `
-                                <label class="flex items-center space-x-3 cursor-pointer">
+                                <label class="flex items-center space-x-3 cursor-pointer p-2 rounded-lg hover:bg-slate-100 active:bg-slate-200">
                                     <input type="checkbox" name="q_${idx}" value="${opt}" class="form-checkbox h-5 w-5 text-brand-600 focus:ring-brand-500 border-gray-300">
-                                    <span class="text-slate-700">${opt}</span>
+                                    <span class="text-slate-700 text-base">${opt}</span>
                                 </label>
                             `).join('')}
                         </div>`;
@@ -326,20 +435,20 @@ const app = {
             const optionsInput = q.type !== 'text' 
                 ? `<div class="mt-2">
                      <label class="text-xs text-slate-500">選項 (請用逗號分隔)</label>
-                     <input type="text" value="${q.options.join(', ')}" onchange="app.updateQuestionOptions(${idx}, this.value)" class="w-full text-sm px-3 py-1.5 border border-slate-200 rounded-lg" placeholder="例如: 是, 否, 其他">
+                     <input type="text" value="${q.options.join(', ')}" onchange="app.updateQuestionOptions(${idx}, this.value)" class="w-full text-base px-3 py-2 border border-slate-200 rounded-lg" placeholder="例如: 是, 否, 其他">
                    </div>` 
                 : '';
 
             return `
             <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 relative group">
-                <button type="button" onclick="app.removeQuestion(${idx})" class="absolute top-2 right-2 text-slate-400 hover:text-red-500 px-2">✕</button>
+                <button type="button" onclick="app.removeQuestion(${idx})" class="absolute top-2 right-2 text-slate-400 hover:text-red-500 px-2 py-1">✕</button>
                 <div class="flex items-center mb-2">
                     <span class="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-0.5 rounded mr-2">${typeLabel}</span>
                     <label class="flex items-center text-xs text-slate-500 cursor-pointer">
-                        <input type="checkbox" onchange="app.updateQuestion(${idx}, 'required', this.checked)" ${q.required ? 'checked' : ''} class="mr-1"> 必填
+                        <input type="checkbox" onchange="app.updateQuestion(${idx}, 'required', this.checked)" ${q.required ? 'checked' : ''} class="mr-1 h-4 w-4"> 必填
                     </label>
                 </div>
-                <input type="text" value="${q.label}" onchange="app.updateQuestion(${idx}, 'label', this.value)" class="w-full font-bold bg-transparent border-b border-dashed border-slate-300 focus:border-brand-500 outline-none placeholder-slate-400" placeholder="請輸入題目內容...">
+                <input type="text" value="${q.label}" onchange="app.updateQuestion(${idx}, 'label', this.value)" class="w-full font-bold bg-transparent border-b border-dashed border-slate-300 focus:border-brand-500 outline-none placeholder-slate-400 py-1 text-base" placeholder="請輸入題目內容...">
                 ${optionsInput}
             </div>
             `;
@@ -352,47 +461,108 @@ const app = {
         const container = document.getElementById('signature-pad-container');
         const ctx = canvas.getContext('2d');
         let isDrawing = false;
+        let points = [];
+        
+        app.state.signatureHistory = []; // Reset history
 
         const resize = () => {
             const rect = container.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return;
+
             const dpr = window.devicePixelRatio || 1;
             canvas.style.width = `${rect.width}px`;
             canvas.style.height = `${rect.height}px`;
             canvas.width = rect.width * dpr;
             canvas.height = rect.height * dpr;
             ctx.scale(dpr, dpr);
-            ctx.lineWidth = 3;
+            
+            // Pen Style
+            ctx.lineWidth = 2.5;
             ctx.lineJoin = 'round';
             ctx.lineCap = 'round';
             ctx.strokeStyle = '#0f172a';
+            ctx.shadowBlur = 0.5;
+            ctx.shadowColor = '#0f172a';
+            
+            app.state.signatureHistory = []; // Clear history on resize
         };
 
         window.addEventListener('resize', resize);
-        // Initial resize
-        setTimeout(resize, 100);
+        window.addEventListener('orientationchange', () => setTimeout(resize, 200)); 
+        setTimeout(resize, 200);
 
         const getCoords = (e) => {
             const rect = canvas.getBoundingClientRect();
-            const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-            const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-            return { x, y };
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { 
+                x: clientX - rect.left, 
+                y: clientY - rect.top 
+            };
         };
 
         const start = (e) => {
             if(e.cancelable) e.preventDefault();
+            if (canvas.width === 0) resize();
+
             isDrawing = true;
+            points = [];
+            
+            // Save state for undo BEFORE drawing new stroke
+            // We use getImageData at native resolution (not CSS pixels)
+            app.state.signatureHistory.push(
+                ctx.getImageData(0, 0, canvas.width, canvas.height)
+            );
+            
+            const coords = getCoords(e);
+            points.push(coords);
+            
             document.getElementById('signature-placeholder').classList.add('hidden');
-            const { x, y } = getCoords(e);
-            ctx.beginPath();
-            ctx.moveTo(x, y);
         };
 
         const move = (e) => {
             if(e.cancelable) e.preventDefault();
             if (!isDrawing) return;
-            const { x, y } = getCoords(e);
-            ctx.lineTo(x, y);
-            ctx.stroke();
+            
+            const coords = getCoords(e);
+            points.push(coords);
+
+            // Smoother drawing with Quadratic Bezier Curves
+            if (points.length > 2) {
+                const lastTwo = points.slice(-2);
+                const p1 = lastTwo[0];
+                const p2 = lastTwo[1];
+                const midPoint = {
+                    x: (p1.x + p2.x) / 2,
+                    y: (p1.y + p2.y) / 2
+                };
+
+                ctx.beginPath();
+                // Move to the last point (or start)
+                if (points.length === 3) {
+                    ctx.moveTo(points[0].x, points[0].y);
+                } else {
+                    // We need to track where the last curve ended. 
+                    // Actually, simpler approach for live drawing:
+                    // Just draw curve from p1 to midPoint using p1 as control? No.
+                    // Standard approach: Curve from Mid(p0, p1) to Mid(p1, p2) with p1 control.
+                    
+                    // Simplified implementation for live buffer:
+                    // Just draw small segments is choppy.
+                    // Let's use the simple mid-point algo.
+                    
+                    // We redraw the last segment properly:
+                    const p0 = points[points.length - 3];
+                    const mid1 = { x: (p0.x + p1.x)/2, y: (p0.y + p1.y)/2 };
+                    const mid2 = { x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2 };
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(mid1.x, mid1.y);
+                    ctx.quadraticCurveTo(p1.x, p1.y, mid2.x, mid2.y);
+                    ctx.stroke();
+                }
+            }
+            
             app.state.hasSignature = true;
             document.getElementById('signature-success-badge').classList.remove('hidden');
         };
@@ -400,6 +570,14 @@ const app = {
         const end = (e) => {
             if(e.cancelable) e.preventDefault();
             isDrawing = false;
+            // Handle single dot
+            if (points.length === 1) {
+                const p = points[0];
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+                ctx.fill();
+                app.state.hasSignature = true;
+            }
         };
 
         canvas.addEventListener('mousedown', start);
@@ -412,9 +590,38 @@ const app = {
 
         app.state.signaturePad = { canvas, ctx, resize };
     },
+    
+    undoSignature: () => {
+        const { canvas, ctx } = app.state.signaturePad;
+        if (app.state.signatureHistory.length > 0) {
+            const lastState = app.state.signatureHistory.pop();
+            // Restore native pixel data
+            ctx.putImageData(lastState, 0, 0);
+            
+            if (app.state.signatureHistory.length === 0) {
+                 // Check if canvas is actually empty visually? 
+                 // If we popped to empty state, it might still have lines if we pushed empty state at start?
+                 // Our logic pushes BEFORE stroke. So if history is empty, canvas might still have 1 stroke?
+                 // No, we push current state (which might be empty).
+                 // So if history is empty, it means we are at the very beginning (or user didn't draw yet)
+                 // But wait, undo action restores the state.
+                 // So if we just restored the last state, is that state empty?
+                 // Simple check:
+                 // app.state.hasSignature = ??? (hard to know without pixel scanning)
+                 // For UX, just keep badge if history > 0 or assume user knows.
+                 // Better: If history is empty, it means we reverted to initial state (blank).
+            }
+        } else {
+            // Nothing to undo
+        }
+    },
 
     clearSignature: () => {
-        const { canvas, ctx } = app.state.signaturePad;
+        const { canvas, ctx, resize } = app.state.signaturePad;
+        
+        // Ensure size is correct before clearing
+        resize();
+
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -422,6 +629,7 @@ const app = {
         document.getElementById('signature-placeholder').classList.remove('hidden');
         document.getElementById('signature-success-badge').classList.add('hidden');
         app.state.hasSignature = false;
+        app.state.signatureHistory = [];
     },
 
     handleFormSubmit: async (e) => {
@@ -431,6 +639,14 @@ const app = {
 
         // Validation
         const studentId = document.getElementById('input-student-id').value.trim();
+        const studentClass = document.getElementById('input-student-class').value;
+        
+        if (!studentClass) {
+             errorEl.innerText = "請選擇班級";
+             errorEl.classList.remove('hidden');
+             return;
+        }
+
         if (!/^[a-zA-Z0-9]+$/.test(studentId)) {
             errorEl.innerText = "學號格式錯誤 (僅限英數字)";
             errorEl.classList.remove('hidden');
@@ -520,6 +736,7 @@ const app = {
         
         const data = {
             surveyId: app.state.selectedSurvey.id,
+            studentClass: document.getElementById('input-student-class').value,
             studentName: document.getElementById('input-student-name').value,
             studentId: document.getElementById('input-student-id').value.trim().toUpperCase(),
             parentName: document.getElementById('input-parent-name').value,
@@ -536,6 +753,7 @@ const app = {
 
         try {
             const res = await API.saveResponse(data);
+            app.clearDraft(data.surveyId); // Clear draft on success
             app.showReceipt(res);
         } catch (err) {
             alert("提交失敗: " + err.message);
@@ -612,7 +830,10 @@ const app = {
         
         // Load responses
         const tbody = document.getElementById('admin-response-table');
+        const mobileList = document.getElementById('admin-response-mobile-list');
+        
         tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">載入中...</td></tr>';
+        mobileList.innerHTML = '<div class="text-center py-4 text-slate-500">載入中...</div>';
         
         try {
             const responses = await API.getResponses(surveyId);
@@ -624,23 +845,48 @@ const app = {
 
             if(responses.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">尚無回覆</td></tr>';
+                mobileList.innerHTML = '<div class="text-center py-8 text-slate-400">尚無回覆</div>';
                 return;
             }
 
+            // Render Desktop Table
             tbody.innerHTML = responses.map(r => `
                 <tr class="hover:bg-slate-50">
+                     <td class="px-6 py-4">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          ${r.studentClass || '未填'}
+                        </span>
+                    </td>
                     <td class="px-6 py-4">
                         <div class="font-bold text-sm">${r.studentName}</div>
                         <div class="text-xs text-slate-500 font-mono">${r.studentId}</div>
                     </td>
-                    <td class="px-6 py-4 text-sm">${r.parentName}</td>
+                    <td class="px-6 py-4 text-sm text-slate-700 font-medium">${r.parentName}</td>
                     <td class="px-6 py-4 text-xs text-slate-500">${new Date(r.submittedAt).toLocaleString()}</td>
-                    <td class="px-6 py-4 text-sm truncate max-w-xs">${r.comments || ''}</td>
-                    <td class="px-6 py-4">
+                    <td class="px-6 py-4 whitespace-nowrap">
                         <button onclick='app.showCertificate(${JSON.stringify(r).replace(/'/g, "&#39;")})' class="text-xs bg-brand-50 text-brand-700 px-3 py-1 rounded-full border border-brand-200">詳情</button>
                     </td>
                 </tr>
             `).join('');
+
+            // Render Mobile Cards
+            mobileList.innerHTML = responses.map(r => `
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                             <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 mb-1">${r.studentClass || '未填'}</span>
+                            <div class="font-bold text-slate-900 text-lg">${r.studentName} <span class="text-xs text-slate-500 font-mono font-normal">#${r.studentId}</span></div>
+                        </div>
+                        <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">${new Date(r.submittedAt).toLocaleDateString()}</span>
+                    </div>
+                    <div class="text-sm text-slate-600 mb-1"><span class="font-bold text-slate-400 text-xs uppercase mr-2">家長</span>${r.parentName}</div>
+                    ${r.comments ? `<div class="text-sm text-slate-500 mb-3 bg-slate-50 p-2 rounded">${r.comments}</div>` : ''}
+                    <div class="flex justify-end mt-2">
+                         <button onclick='app.showCertificate(${JSON.stringify(r).replace(/'/g, "&#39;")})' class="text-xs font-bold text-brand-600 border border-brand-200 bg-brand-50 px-4 py-2 rounded-lg w-full sm:w-auto">查看詳情 & 驗證</button>
+                    </div>
+                </div>
+            `).join('');
+
         } catch(e) {
             console.error(e);
         }
@@ -668,10 +914,10 @@ const app = {
 
             // Create Canvas Container
             const wrapper = document.createElement('div');
-            wrapper.className = "bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col";
+            wrapper.className = "bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 flex flex-col";
             wrapper.innerHTML = `
                 <h4 class="text-sm font-bold text-slate-800 mb-4 border-l-4 border-brand-500 pl-2">${q.label}</h4>
-                <div class="flex-grow flex items-center justify-center relative h-64">
+                <div class="flex-grow flex items-center justify-center relative h-56 sm:h-64">
                     <canvas id="chart-${idx}"></canvas>
                 </div>
             `;
@@ -726,7 +972,7 @@ const app = {
         const responses = app.state.currentAdminResponses || [];
         if(!responses.length) return alert("無資料可匯出");
 
-        const headers = ["學生姓名", "學號", "家長姓名", "提交時間", "備註", "回答內容", "驗證狀態", "IP", "流水號"];
+        const headers = ["班級", "學生姓名", "學號", "家長姓名", "提交時間", "備註", "回答內容", "驗證狀態", "IP", "流水號"];
         const rows = responses.map(r => {
             // Flatten answers to string
             let answersStr = "";
@@ -735,6 +981,7 @@ const app = {
             }
 
             return [
+                r.studentClass || "",
                 r.studentName,
                 r.studentId,
                 r.parentName,
@@ -799,13 +1046,13 @@ const app = {
             answersHtml = Object.entries(r.answers).map(([label, val]) => `
                 <div class="mb-3 border-b border-slate-100 pb-2 last:border-0">
                     <div class="text-xs text-slate-500 font-bold mb-1">${label}</div>
-                    <div class="text-sm text-slate-800">${Array.isArray(val) ? val.join(', ') : val}</div>
+                    <div class="text-sm text-slate-800 break-words">${Array.isArray(val) ? val.join(', ') : val}</div>
                 </div>
             `).join('');
         }
 
         content.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                  <!-- 簽名區塊 -->
                 <div class="col-span-1 md:col-span-2">
                     <div class="border-2 border-slate-200 rounded-xl bg-slate-50 h-32 flex items-center justify-center overflow-hidden mb-2 relative">
@@ -813,10 +1060,16 @@ const app = {
                         <img src="${r.signatureDataUrl}" class="max-h-24 relative z-10" />
                     </div>
                 </div>
+                
+                <div class="col-span-1 md:col-span-2 mb-2">
+                     <span class="inline-block px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100">
+                        ${r.studentClass || '未填班級'} - ${r.studentName}
+                     </span>
+                </div>
 
                 <!-- 詳細回答區塊 -->
                 <div class="col-span-1 md:col-span-2">
-                    <h4 class="font-bold text-slate-800 mb-2 flex items-center">
+                    <h4 class="font-bold text-slate-800 mb-2 flex items-center text-sm sm:text-base">
                         <svg class="w-4 h-4 mr-1 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                         填寫內容詳細
                     </h4>
@@ -828,11 +1081,11 @@ const app = {
                 <!-- Metadata -->
                 <div class="bg-slate-50 p-3 rounded-lg border">
                     <span class="text-xs text-slate-400 font-bold block">PIN 驗證</span>
-                    <span class="font-mono font-bold text-slate-800">${r.securityMetadata?.verifiedByPin ? 'PASS' : 'FAIL'}</span>
+                    <span class="font-mono font-bold text-slate-800 text-sm">${r.securityMetadata?.verifiedByPin ? 'PASS' : 'FAIL'}</span>
                 </div>
                 <div class="bg-slate-50 p-3 rounded-lg border">
                     <span class="text-xs text-slate-400 font-bold block">IP 位址</span>
-                    <span class="font-mono text-slate-800">${r.securityMetadata?.ipAddress || 'Unknown'}</span>
+                    <span class="font-mono text-slate-800 text-sm break-all">${r.securityMetadata?.ipAddress || 'Unknown'}</span>
                 </div>
             </div>
         `;

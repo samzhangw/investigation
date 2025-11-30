@@ -1,7 +1,7 @@
 
 // ==========================================
 // 將此代碼複製到 Google Sheet > 擴充功能 > Apps Script
-// 最後更新：新增 questions 與 answers 欄位支援自訂題目
+// 最後更新：新增 studentClass (班級) 欄位與自動修復
 // ==========================================
 
 const SCRIPT_PROP = PropertiesService.getScriptProperties();
@@ -114,11 +114,13 @@ function handleRequest(e) {
 
       const answersStr = r.answers ? JSON.stringify(r.answers) : "{}";
 
+      // 欄位順序: id, surveyId, studentName, studentId, studentClass, parentName, signatureDataUrl, comments, submittedAt, securityMetadata, answers
       const newRow = [
         r.id, 
         r.surveyId, 
         r.studentName, 
         r.studentId, 
+        r.studentClass || "", // New Field
         r.parentName, 
         r.signatureDataUrl, 
         r.comments, 
@@ -176,7 +178,8 @@ function getOrInitSheet(doc, sheetName) {
     if (sheetName === "Surveys") {
       sheet.appendRow(["id", "title", "description", "deadline", "status", "createdAt", "pin", "questions"]);
     } else if (sheetName === "Responses") {
-      sheet.appendRow(["id", "surveyId", "studentName", "studentId", "parentName", "signatureDataUrl", "comments", "submittedAt", "securityMetadata", "answers"]);
+      // Added studentClass
+      sheet.appendRow(["id", "surveyId", "studentName", "studentId", "studentClass", "parentName", "signatureDataUrl", "comments", "submittedAt", "securityMetadata", "answers"]);
     }
     return sheet;
   }
@@ -194,14 +197,24 @@ function getOrInitSheet(doc, sheetName) {
      }
      
      if (sheetName === "Responses") {
-       if (!headers.includes("answers")) sheet.getRange(1, lastCol + 1).setValue("answers");
+       // Check for answers
+       if (!headers.includes("answers")) {
+         sheet.getRange(1, sheet.getLastColumn() + 1).setValue("answers");
+       }
+       // Check for studentClass (might be missing in old sheets)
+       const updatedHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+       if (!updatedHeaders.includes("studentClass")) {
+           // Insert before parentName if possible, or just append
+           // Simply append for safety
+           sheet.getRange(1, sheet.getLastColumn() + 1).setValue("studentClass");
+       }
      }
   } else {
      // 表格存在但是空的
      if (sheetName === "Surveys") {
        sheet.appendRow(["id", "title", "description", "deadline", "status", "createdAt", "pin", "questions"]);
      } else if (sheetName === "Responses") {
-        sheet.appendRow(["id", "surveyId", "studentName", "studentId", "parentName", "signatureDataUrl", "comments", "submittedAt", "securityMetadata", "answers"]);
+        sheet.appendRow(["id", "surveyId", "studentName", "studentId", "studentClass", "parentName", "signatureDataUrl", "comments", "submittedAt", "securityMetadata", "answers"]);
      }
   }
 
