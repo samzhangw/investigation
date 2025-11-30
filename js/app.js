@@ -1,5 +1,6 @@
 
 
+
 /**
  * Main Application Logic
  */
@@ -1135,8 +1136,49 @@ const app = {
     },
 
     openCreateSurveyModal: () => {
+        // Reset state for CREATE mode
         app.state.newSurveyQuestions = [];
         document.getElementById('create-survey-form').reset();
+        document.getElementById('edit-survey-id').value = ""; // Clear edit ID
+        document.getElementById('modal-survey-title').innerText = "建立新調查";
+        document.getElementById('btn-submit-survey').innerText = "建立";
+        
+        app.renderQuestionBuilder();
+        document.getElementById('modal-create').classList.remove('hidden');
+    },
+
+    // New: Open Edit Modal
+    openEditSurveyModal: () => {
+        const surveyId = document.getElementById('admin-survey-select').value;
+        const survey = app.state.surveys.find(s => s.id === surveyId);
+        
+        if(!survey) return alert("請先選擇一個調查");
+        if(confirm("注意：修改正在進行中的調查可能會影響已收集的回覆數據（例如修改題目順序或選項）。確定要繼續嗎？") === false) return;
+
+        // Set state for EDIT mode
+        document.getElementById('edit-survey-id').value = survey.id;
+        document.getElementById('new-survey-title').value = survey.title;
+        document.getElementById('new-survey-desc').value = survey.description;
+        
+        // Date formatting helper
+        const toDateTimeLocal = (dateStr) => {
+             if(!dateStr) return "";
+             const d = new Date(dateStr);
+             // Format: YYYY-MM-DDTHH:mm
+             const pad = (n) => n.toString().padStart(2, '0');
+             return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        };
+
+        document.getElementById('new-survey-start').value = toDateTimeLocal(survey.startTime);
+        document.getElementById('new-survey-end').value = toDateTimeLocal(survey.deadline);
+
+        // Load questions
+        app.state.newSurveyQuestions = survey.questions ? JSON.parse(JSON.stringify(survey.questions)) : []; // Deep copy
+        
+        // Update UI Text
+        document.getElementById('modal-survey-title').innerText = "編輯調查";
+        document.getElementById('btn-submit-survey').innerText = "更新";
+
         app.renderQuestionBuilder();
         document.getElementById('modal-create').classList.remove('hidden');
     },
@@ -1145,6 +1187,7 @@ const app = {
         e.preventDefault();
         const start = document.getElementById('new-survey-start').value;
         const end = document.getElementById('new-survey-end').value;
+        const editId = document.getElementById('edit-survey-id').value;
 
         // Date check
         if (new Date(start) >= new Date(end)) {
@@ -1152,6 +1195,7 @@ const app = {
         }
 
         const data = {
+            id: editId || null, // If null, backend handles new ID
             title: document.getElementById('new-survey-title').value,
             description: document.getElementById('new-survey-desc').value,
             startTime: start,
@@ -1160,17 +1204,30 @@ const app = {
         };
         
         document.getElementById('modal-create').classList.add('hidden');
-        app.setLoading(true, "建立調查中...");
-
-        try {
-            const newS = await API.createSurvey(data);
-            app.logAction("建立調查", `${data.title} (PIN: ${newS.pin})`);
-            alert(`建立成功！ PIN: ${newS.pin}`);
-            app.loadSurveys();
-        } catch(err) {
-            alert("建立失敗");
-        } finally {
-            app.setLoading(false);
+        
+        if (editId) {
+             app.setLoading(true, "更新調查中...");
+             try {
+                await API.updateSurvey(data);
+                alert("更新成功！");
+                app.loadSurveys(); // Reload list
+             } catch(err) {
+                alert("更新失敗");
+             } finally {
+                app.setLoading(false);
+             }
+        } else {
+             app.setLoading(true, "建立調查中...");
+             try {
+                const newS = await API.createSurvey(data);
+                app.logAction("建立調查", `${data.title} (PIN: ${newS.pin})`);
+                alert(`建立成功！ PIN: ${newS.pin}`);
+                app.loadSurveys();
+            } catch(err) {
+                alert("建立失敗");
+            } finally {
+                app.setLoading(false);
+            }
         }
     },
 

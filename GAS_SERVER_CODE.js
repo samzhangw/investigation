@@ -10,6 +10,7 @@ function setup() {
   const doc = SpreadsheetApp.getActiveSpreadsheet();
   getOrInitSheet(doc, "Surveys");
   getOrInitSheet(doc, "Responses");
+  getOrInitSheet(doc, "SystemLogs");
 }
 
 function doGet(e) {
@@ -62,11 +63,66 @@ function handleRequest(e) {
       // 處理 questions 陣列轉 JSON 字串
       const questionsStr = s.questions ? JSON.stringify(s.questions) : "[]";
       
-      // 確保欄位順序: id, title, description, deadline, status, createdAt, pin, questions
-      const newRow = [s.id, s.title, s.description, s.deadline, s.status, s.createdAt, pinStr, questionsStr];
+      // 確保欄位順序: id, title, description, deadline, status, createdAt, pin, questions, startTime
+      // 注意：startTime 是後來加的，為了相容性，我們確保表頭存在
+      
+      const newRow = [
+        s.id, 
+        s.title, 
+        s.description, 
+        s.deadline, 
+        s.status, 
+        s.createdAt, 
+        pinStr, 
+        questionsStr,
+        s.startTime || ""
+      ];
       sheet.appendRow(newRow);
+      
+      logSystemAction(doc, "建立調查", "Admin", `${s.title} (ID: ${s.id})`);
       result = s;
     } 
+
+    else if (action === "updateSurvey") {
+      const sheet = getOrInitSheet(doc, "Surveys");
+      const s = postData;
+      const data = getData(sheet);
+      
+      // Find row index (data is 0-indexed, but sheet rows are 1-indexed + 1 header row)
+      // We iterate data array to find index
+      let rowIndex = -1;
+      for (let i = 0; i < data.length; i++) {
+        if (String(data[i].id) === String(s.id)) {
+          rowIndex = i + 2; // +1 for header, +1 because sheet rows start at 1
+          break;
+        }
+      }
+
+      if (rowIndex === -1) {
+        throw new Error("Survey ID not found");
+      }
+
+      // Update specific columns. We assume header order:
+      // ["id", "title", "description", "deadline", "status", "createdAt", "pin", "questions", "startTime"]
+      // Map keys to column index (1-based)
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      
+      const updateCell = (colName, value) => {
+        const colIdx = headers.indexOf(colName);
+        if (colIdx !== -1) {
+          sheet.getRange(rowIndex, colIdx + 1).setValue(value);
+        }
+      };
+
+      updateCell("title", s.title);
+      updateCell("description", s.description);
+      updateCell("deadline", s.deadline);
+      updateCell("questions", s.questions ? JSON.stringify(s.questions) : "[]");
+      updateCell("startTime", s.startTime || "");
+
+      logSystemAction(doc, "更新調查", "Admin", `${s.title} (ID: ${s.id})`);
+      result = { status: "success" };
+    }
     
     else if (action === "getResponses") {
       const sheet = getOrInitSheet(doc, "Responses");
@@ -152,7 +208,22 @@ function handleRequest(e) {
         props.setProperty("ANN_ACTIVE", String(data.isActive));
         props.setProperty("ANN_DATE", String(Date.now()));
         
+        logSystemAction(doc, "發布公告", "Admin", `${data.title} (${data.isActive ? '啟用' : '停用'})`);
         result = { status: "success" };
+    }
+
+    // --- System Logs ---
+    else if (action === "logAction") {
+        const data = postData;
+        logSystemAction(doc, data.action, data.user, data.details);
+        result = { status: "success" };
+    }
+
+    else if (action === "getSystemLogs") {
+        const sheet = getOrInitSheet(doc, "SystemLogs");
+        const data = getData(sheet);
+        // Get last 50 logs
+        result = data.slice(-50).reverse();
     }
 
     return ContentService
@@ -168,6 +239,16 @@ function handleRequest(e) {
   }
 }
 
+function logSystemAction(doc, action, user, details) {
+    try {
+        const sheet = getOrInitSheet(doc, "SystemLogs");
+        sheet.appendRow([new Date().toISOString(), action, user, details]);
+    } catch(e) {
+        // Log failure shouldn't stop app
+        Logger.log("Log failed: " + e);
+    }
+}
+
 // 安全取得工作表，若不存在則建立，若表頭缺失則補全
 function getOrInitSheet(doc, sheetName) {
   let sheet = doc.getSheetByName(sheetName);
@@ -176,10 +257,11 @@ function getOrInitSheet(doc, sheetName) {
     sheet = doc.insertSheet(sheetName);
     // 建立新表頭
     if (sheetName === "Surveys") {
-      sheet.appendRow(["id", "title", "description", "deadline", "status", "createdAt", "pin", "questions"]);
+      sheet.appendRow(["id", "title", "description", "deadline", "status", "createdAt", "pin", "questions", "startTime"]);
     } else if (sheetName === "Responses") {
-      // Added studentClass
       sheet.appendRow(["id", "surveyId", "studentName", "studentId", "studentClass", "parentName", "signatureDataUrl", "comments", "submittedAt", "securityMetadata", "answers"]);
+    } else if (sheetName === "SystemLogs") {
+      sheet.appendRow(["timestamp", "action", "user", "details"]);
     }
     return sheet;
   }
@@ -191,9 +273,12 @@ function getOrInitSheet(doc, sheetName) {
      
      if (sheetName === "Surveys") {
        if (!headers.includes("pin")) sheet.getRange(1, lastCol + 1).setValue("pin");
-       // 重新抓取 lastCol 因為可能剛加了 pin
-       const currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-       if (!currentHeaders.includes("questions")) sheet.getRange(1, sheet.getLastColumn() + 1).setValue("questions");
+       // 重新抓取 lastCol
+       const h2 = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+       if (!h2.includes("questions")) sheet.getRange(1, sheet.getLastColumn() + 1).setValue("questions");
+       
+       const h3 = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+       if (!h3.includes("startTime")) sheet.getRange(1, sheet.getLastColumn() + 1).setValue("startTime");
      }
      
      if (sheetName === "Responses") {
@@ -201,20 +286,20 @@ function getOrInitSheet(doc, sheetName) {
        if (!headers.includes("answers")) {
          sheet.getRange(1, sheet.getLastColumn() + 1).setValue("answers");
        }
-       // Check for studentClass (might be missing in old sheets)
+       // Check for studentClass
        const updatedHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
        if (!updatedHeaders.includes("studentClass")) {
-           // Insert before parentName if possible, or just append
-           // Simply append for safety
            sheet.getRange(1, sheet.getLastColumn() + 1).setValue("studentClass");
        }
      }
   } else {
      // 表格存在但是空的
      if (sheetName === "Surveys") {
-       sheet.appendRow(["id", "title", "description", "deadline", "status", "createdAt", "pin", "questions"]);
+       sheet.appendRow(["id", "title", "description", "deadline", "status", "createdAt", "pin", "questions", "startTime"]);
      } else if (sheetName === "Responses") {
         sheet.appendRow(["id", "surveyId", "studentName", "studentId", "studentClass", "parentName", "signatureDataUrl", "comments", "submittedAt", "securityMetadata", "answers"]);
+     } else if (sheetName === "SystemLogs") {
+        sheet.appendRow(["timestamp", "action", "user", "details"]);
      }
   }
 

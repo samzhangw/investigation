@@ -58,6 +58,11 @@ const API = {
         return newSurvey;
     },
 
+    updateSurvey: async (surveyData) => {
+        await API.fetch('updateSurvey', 'POST', surveyData);
+        return surveyData;
+    },
+
     getResponses: async (surveyId) => {
         return await API.fetch('getResponses', 'GET', { surveyId });
     },
@@ -90,5 +95,14 @@ const API = {
 
     saveAnnouncement: async (data) => {
         return await API.fetch('saveAnnouncement', 'POST', data);
+    },
+
+    // --- Logs ---
+    logAction: async (data) => {
+        return await API.fetch('logAction', 'POST', data);
+    },
+
+    getSystemLogs: async () => {
+        return await API.fetch('getSystemLogs');
     }
 };
